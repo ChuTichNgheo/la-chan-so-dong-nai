@@ -3,12 +3,15 @@
 import type { ReactNode } from 'react';
 import {
   BarChart3,
+  Cpu,
   Gamepad2,
   Home,
   Info,
   Search,
   Settings,
   ShieldCheck,
+  Sparkles,
+  Type,
   Video,
   WifiOff,
 } from 'lucide-react';
@@ -19,14 +22,13 @@ import { CunAiMascot } from './CunAiMascot';
 
 interface MobileShellProps {
   activeScreen: ScreenId;
-  seniorMode: boolean;
   offlineMode: boolean;
   wideRadar: boolean;
   uiMode: UiMode;
   currentUser: AppUserProfile | null;
   toastMessage: string | null;
   onNavigate: (screen: ScreenId) => void;
-  onToggleSenior: () => void;
+  onCycleUiMode: () => void;
   onOpenMascot: () => void;
   children: ReactNode;
 }
@@ -39,21 +41,42 @@ const TAB_ICONS = {
   video: Video,
 } as const;
 
+const MODE_BADGE: Record<
+  UiMode,
+  { label: string; className: string; icon: 'minimal' | 'standard' | 'pro' }
+> = {
+  minimal: {
+    label: 'Tối giản',
+    className: 'bg-[#0D685E] text-white shadow-sm',
+    icon: 'minimal',
+  },
+  standard: {
+    label: 'Tiêu chuẩn',
+    className: 'bg-[#E9FAF5] text-[#0D685E]',
+    icon: 'standard',
+  },
+  pro: {
+    label: 'Chuyên sâu',
+    className: 'bg-[#0F172A] text-[#34D399] shadow-sm',
+    icon: 'pro',
+  },
+};
+
 export function MobileShell({
   activeScreen,
-  seniorMode,
   offlineMode,
   wideRadar,
   uiMode,
   currentUser,
   toastMessage,
   onNavigate,
-  onToggleSenior,
+  onCycleUiMode,
   onOpenMascot,
   children,
 }: MobileShellProps) {
   const activeTab = SCREEN_TAB_MAP[activeScreen];
   const isVideoScreen = activeScreen === 'M05';
+  const modeMeta = MODE_BADGE[uiMode];
 
   const containerWidth = isVideoScreen
     ? 'max-w-[430px]'
@@ -66,7 +89,7 @@ export function MobileShell({
       <div
         className={`relative mx-auto flex h-dvh w-full flex-col overflow-hidden shadow-xl transition-all ${
           isVideoScreen ? 'bg-[#071316]' : 'bg-[#F4FBF8]'
-        } ${containerWidth} ${seniorMode ? 'senior-mode' : ''}`}
+        } ${containerWidth} ${uiMode === 'minimal' ? 'minimal-mode' : ''}`}
       >
         {!isVideoScreen && (
           <header className="z-20 flex shrink-0 items-center justify-between gap-1.5 bg-white/95 px-3 py-2.5 backdrop-blur-md shadow-[0_1px_12px_rgba(13,104,94,0.05)] sm:px-4">
@@ -74,17 +97,20 @@ export function MobileShell({
             <div className="flex shrink-0 items-center gap-1.5">
               <button
                 type="button"
-                onClick={onToggleSenior}
+                onClick={onCycleUiMode}
                 data-screen={activeScreen}
-                data-ui="btn-toggle-senior"
-                aria-pressed={seniorMode}
-                className={`min-h-[34px] whitespace-nowrap rounded-full px-2.5 text-[11px] font-bold transition sm:min-h-[36px] sm:px-3 sm:text-xs ${
-                  seniorMode
-                    ? 'bg-[#0D685E] text-white shadow-sm'
-                    : 'bg-[#E9FAF5] text-[#0D685E]'
-                }`}
+                data-ui="btn-cycle-ui-mode"
+                title="Đổi nhanh chế độ giao diện: Tối giản → Tiêu chuẩn → Chuyên sâu"
+                className={`inline-flex min-h-[34px] whitespace-nowrap items-center gap-1 rounded-full px-2.5 text-[11px] font-bold transition sm:min-h-[36px] sm:px-3 sm:text-xs ${modeMeta.className}`}
               >
-                Chữ lớn 65+
+                {modeMeta.icon === 'minimal' ? (
+                  <Type className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                ) : modeMeta.icon === 'pro' ? (
+                  <Cpu className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                )}
+                <span>{modeMeta.label}</span>
               </button>
               <button
                 type="button"
@@ -111,11 +137,6 @@ export function MobileShell({
                       : currentUser.username
                     : 'Cài đặt'}
                 </span>
-                {uiMode === 'tech' && (
-                  <span className="hidden rounded bg-[#0D685E]/15 px-1 text-[9px] font-extrabold text-[#0D685E] sm:inline">
-                    TECH
-                  </span>
-                )}
               </button>
             </div>
           </header>

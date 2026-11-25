@@ -214,7 +214,7 @@ export function CunAiSheet({
         <div className="mt-3 flex items-center justify-center gap-1.5 text-[11px] font-medium text-[#475569]">
           <ShieldCheck className="h-3.5 w-3.5 text-[#0D685E]" aria-hidden="true" />
           <span>
-            {uiMode === 'tech'
+            {uiMode === 'pro'
               ? 'Human-in-the-Loop • Gemini 3 Flash Hybrid'
               : 'Bạn luôn là người bấm xác nhận cuối cùng'}
           </span>

@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Type,
   User,
   UserPlus,
 } from 'lucide-react';
@@ -20,9 +21,7 @@ import type { AppUserProfile, ScamReport, ScanHistoryItem, ScreenId, UiMode } fr
 interface AccountScreenProps {
   currentUser: AppUserProfile | null;
   uiMode: UiMode;
-  seniorMode: boolean;
   onChangeUiMode: (mode: UiMode) => void;
-  onToggleSenior: () => void;
   onAuthChanged: (user: AppUserProfile | null) => void;
   onNavigate: (screen: ScreenId) => void;
   onNotify: (msg: string) => void;
@@ -31,9 +30,7 @@ interface AccountScreenProps {
 export function AccountScreen({
   currentUser,
   uiMode,
-  seniorMode,
   onChangeUiMode,
-  onToggleSenior,
   onAuthChanged,
   onNavigate,
   onNotify,
@@ -135,67 +132,81 @@ export function AccountScreen({
 
   const modeSelectorCard = (
     <div className="space-y-3 rounded-3xl bg-white p-4 shadow-[0_6px_24px_rgba(13,104,94,0.07)]">
-      <div className="flex items-center justify-between gap-2">
+      <div>
         <div className="flex items-center gap-2 font-[family-name:var(--font-lexend)] text-sm font-extrabold text-[#0F172A]">
           <SlidersHorizontal className="h-4 w-4 text-[#0D685E]" aria-hidden="true" />
-          Chế độ Giao diện
+          Giao diện Thích ứng (theo thói quen dùng máy)
         </div>
-        <button
-          type="button"
-          onClick={onToggleSenior}
-          className={`rounded-full px-3 py-1 text-[11px] font-bold transition ${
-            seniorMode ? 'bg-[#0D685E] text-white' : 'bg-[#E9FAF5] text-[#0D685E]'
-          }`}
-        >
-          {seniorMode ? 'Chữ lớn 65+: Bật' : 'Chữ lớn 65+: Tắt'}
-        </button>
+        <p className="mt-1 text-[11px] text-[#475569]">
+          Không giới hạn theo độ tuổi — chọn mức hiển thị phù hợp nhất với bạn.
+        </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 text-xs">
+      <div className="grid grid-cols-3 gap-2 text-xs">
         <button
           type="button"
-          onClick={() => onChangeUiMode('simple')}
+          onClick={() => onChangeUiMode('minimal')}
           data-screen="M09"
-          data-ui="btn-mode-simple"
-          className={`rounded-2xl p-3 text-left transition ${
-            uiMode === 'simple'
+          data-ui="btn-mode-minimal"
+          className={`rounded-2xl p-2.5 text-left transition ${
+            uiMode === 'minimal'
+              ? 'bg-[#0D685E] text-white ring-2 ring-[#14B8A6]'
+              : 'bg-[#F4FBF8] text-[#475569] hover:bg-slate-100'
+          }`}
+        >
+          <div className={`flex items-center gap-1 font-extrabold ${uiMode === 'minimal' ? 'text-white' : 'text-[#0D685E]'}`}>
+            <Type className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            Tối giản
+          </div>
+          <div className={`mt-1 text-[10.5px] leading-snug ${uiMode === 'minimal' ? 'text-[#D1FAE5]' : 'text-[#475569]'}`}>
+            Chữ to, 1 chạm, bật Nghe trực tiếp ngay.
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onChangeUiMode('standard')}
+          data-screen="M09"
+          data-ui="btn-mode-standard"
+          className={`rounded-2xl p-2.5 text-left transition ${
+            uiMode === 'standard'
               ? 'bg-[#E9FAF5] ring-2 ring-[#0D685E]'
               : 'bg-[#F4FBF8] text-[#475569] hover:bg-slate-100'
           }`}
         >
-          <div className="flex items-center gap-1.5 font-extrabold text-[#0D685E]">
-            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-            Đơn giản
+          <div className="flex items-center gap-1 font-extrabold text-[#0D685E]">
+            <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            Tiêu chuẩn
           </div>
-          <div className="mt-1 text-[11px] leading-snug text-[#475569]">
-            Mặc định gọn gàng cho mọi người dân dùng hằng ngày.
+          <div className="mt-1 text-[10.5px] leading-snug text-[#475569]">
+            Cân bằng, đầy đủ tính năng hằng ngày.
           </div>
         </button>
 
         <button
           type="button"
-          onClick={() => onChangeUiMode('tech')}
+          onClick={() => onChangeUiMode('pro')}
           data-screen="M09"
-          data-ui="btn-mode-tech"
-          className={`rounded-2xl p-3 text-left transition ${
-            uiMode === 'tech'
+          data-ui="btn-mode-pro"
+          className={`rounded-2xl p-2.5 text-left transition ${
+            uiMode === 'pro'
               ? 'bg-[#0F172A] text-white ring-2 ring-[#0D685E]'
               : 'bg-[#F4FBF8] text-[#475569] hover:bg-slate-100'
           }`}
         >
-          <div className={`flex items-center gap-1.5 font-extrabold ${uiMode === 'tech' ? 'text-[#34D399]' : 'text-[#0F172A]'}`}>
-            <Cpu className="h-3.5 w-3.5" aria-hidden="true" />
-            Công nghệ
+          <div className={`flex items-center gap-1 font-extrabold ${uiMode === 'pro' ? 'text-[#34D399]' : 'text-[#0F172A]'}`}>
+            <Cpu className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            Chuyên sâu
           </div>
-          <div className={`mt-1 text-[11px] leading-snug ${uiMode === 'tech' ? 'text-slate-300' : 'text-[#475569]'}`}>
-            Hiện phân tích URL, nguồn AI/DB &amp; công cụ kiểm tra chuyên sâu.
+          <div className={`mt-1 text-[10.5px] leading-snug ${uiMode === 'pro' ? 'text-slate-300' : 'text-[#475569]'}`}>
+            Phân tích URL, nguồn AI/DB &amp; test hệ thống.
           </div>
         </button>
       </div>
     </div>
   );
 
-  const techOnlyDiagnostic = uiMode === 'tech' && (
+  const techOnlyDiagnostic = uiMode === 'pro' && (
     <button
       type="button"
       onClick={() => onNavigate('M08')}
@@ -419,10 +430,10 @@ export function AccountScreen({
             </button>
           </form>
 
-          {uiMode === 'tech' && (
+          {uiMode === 'pro' && (
             <div className="space-y-2.5 rounded-3xl bg-[#E9FAF5] p-4 text-xs">
               <div className="font-extrabold text-[#0D685E]">
-                Đăng nhập nhanh thử nghiệm (Chế độ Công nghệ):
+                Đăng nhập nhanh thử nghiệm (Chế độ Chuyên sâu):
               </div>
               <div className="grid grid-cols-2 gap-2.5">
                 <button

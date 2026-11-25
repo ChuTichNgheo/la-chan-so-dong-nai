@@ -20,12 +20,14 @@
   --font-display: var(--font-lexend);
 }
 
+.minimal-mode,
 .senior-mode {
-  --fs-body: 19px;
-  --btn-min-h: 56px;
+  --fs-body: 18px;
+  --btn-min-h: 54px;
   font-size: var(--fs-body);
 }
 
+.minimal-mode button,
 .senior-mode button {
   min-height: var(--btn-min-h);
 }

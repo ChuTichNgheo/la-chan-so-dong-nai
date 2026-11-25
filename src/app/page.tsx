@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { useEffect, useRef, useState } from 'react';
 import { CunAiGuideOverlay, type CunGuideStep } from '@/components/CunAiGuideOverlay';
 import { CunAiSheet, type CunFlowId } from '@/components/CunAiSheet';
+import { LiveVoiceGuardModal } from '@/components/LiveVoiceGuardModal';
 import { MobileShell } from '@/components/MobileShell';
 import { runLayerOneRules } from '@/data/local-rules';
 import { INITIAL_RADAR_STATS } from '@/data/mock-radar';
@@ -12,7 +13,15 @@ import { ScannerScreen } from '@/features/m02-scanner/ScannerScreen';
 import { analyzeContentHybrid } from '@/lib/hybrid-scanner';
 import { fetchRadarReports } from '@/lib/report-store';
 import { speakAlertVietnamese, stopVietnameseSpeech } from '@/lib/speech';
-import type { AnalyzeResult, AppUserProfile, RadarStats, RiskLevel, ScreenId, UiMode } from '@/types';
+import type {
+  AnalyzeResult,
+  AppUserProfile,
+  RadarStats,
+  RiskLevel,
+  ScamReport,
+  ScreenId,
+  UiMode,
+} from '@/types';
 
 const ScreenFallback = () => (
   <div className="rounded-2xl bg-white p-4 text-xs text-[#475569] shadow-sm">
@@ -51,34 +60,44 @@ const AccountScreen = dynamic(
 
 const PRESET_INPUTS: Record<RiskLevel, string> = {
   danger:
-    'Tôi là cán bộ công an Biên Hòa. Tài khoản của bác liên quan vụ án, hãy chuyển 50.000.000đ để xác minh ngay hôm nay nếu không sẽ bị khởi tố.',
+    'Tôi là cán bộ công an Biên Hòa. Tài khoản của bác liên quan vụ án, giữ bí mật và chuyển 50.000.000đ để xác minh ngay hôm nay nếu không sẽ bị khởi tố.',
   warn: 'Tuyển CTV việc nhẹ lương cao 300k/ngày, bấm link http://nhanqua-shopee-vn.xyz và nạp trước 200k mở nhiệm vụ.',
   unknown: 'Số điện thoại lạ 0384-991-882 gọi rủ đầu tư lãi cao.',
   safe: 'https://canhbao.ncsc.gov.vn',
 };
 
-const UI_MODE_STORAGE_KEY = 'lacd_ui_mode_v1';
+const UI_MODE_STORAGE_KEY = 'lacd_ui_mode_v2';
 const CONTACT_STORAGE_KEY = 'lacd_family_contact_v1';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const MODE_ORDER: UiMode[] = ['minimal', 'standard', 'pro'];
+const MODE_TOAST: Record<UiMode, string> = {
+  minimal: 'Chế độ Tối giản: Chữ lớn, 1 chạm, dễ thao tác cho mọi lứa tuổi.',
+  standard: 'Chế độ Tiêu chuẩn: Cân bằng đầy đủ tính năng hàng ngày.',
+  pro: 'Chế độ Chuyên sâu: Hiện phân tích URL, nguồn AI/DB & công cụ hệ thống.',
+};
+
 export default function HomePage() {
   const [activeScreen, setActiveScreen] = useState<ScreenId>('M01');
-  const [uiMode, setUiMode] = useState<UiMode>('simple');
-  const [seniorMode, setSeniorMode] = useState(false);
+  const [uiMode, setUiMode] = useState<UiMode>('standard');
   const [offlineMode, setOfflineMode] = useState(false);
   const [wideRadar, setWideRadar] = useState(false);
   const [videoStartIdx, setVideoStartIdx] = useState(0);
   const [analyzing, setAnalyzing] = useState(false);
   const [scannedText, setScannedText] = useState('');
   const [scanResult, setScanResult] = useState<AnalyzeResult | null>(null);
+  const [hasScannedOnce, setHasScannedOnce] = useState(false);
+  const [hasCustomContact, setHasCustomContact] = useState(false);
   const [currentUser, setCurrentUser] = useState<AppUserProfile | null>(null);
   const [radarStats, setRadarStats] = useState<RadarStats>(INITIAL_RADAR_STATS);
+  const [recentApproved, setRecentApproved] = useState<ScamReport[]>([]);
   const [localContact, setLocalContact] = useState({
     name: 'Chị Lan (Con gái)',
     phone: '0912345678',
   });
   const [cunOpen, setCunOpen] = useState(false);
+  const [liveVoiceOpen, setLiveVoiceOpen] = useState(false);
   const [guideStep, setGuideStep] = useState<CunGuideStep | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const flowTokenRef = useRef(0);
@@ -88,13 +107,22 @@ export default function HomePage() {
     void Promise.resolve().then(() => {
       if (!active) return;
       try {
-        const savedMode = window.localStorage.getItem(UI_MODE_STORAGE_KEY);
-        if (savedMode === 'tech' || savedMode === 'simple') setUiMode(savedMode);
+        const params = new URLSearchParams(window.location.search);
+        const queryMode = params.get('mode');
+        if (queryMode === 'minimal' || queryMode === 'standard' || queryMode === 'pro') {
+          setUiMode(queryMode);
+        } else {
+          const savedMode = window.localStorage.getItem(UI_MODE_STORAGE_KEY);
+          if (savedMode === 'minimal' || savedMode === 'standard' || savedMode === 'pro') {
+            setUiMode(savedMode);
+          }
+        }
         const savedContact = window.localStorage.getItem(CONTACT_STORAGE_KEY);
         if (savedContact) {
           const parsed = JSON.parse(savedContact) as { name?: string; phone?: string };
           if (parsed.name && parsed.phone) {
             setLocalContact({ name: parsed.name, phone: parsed.phone });
+            setHasCustomContact(true);
           }
         }
       } catch {
@@ -111,7 +139,9 @@ export default function HomePage() {
 
     void fetchRadarReports()
       .then((data) => {
-        if (active) setRadarStats(data.stats);
+        if (!active) return;
+        setRadarStats(data.stats);
+        setRecentApproved(data.recentApproved);
       })
       .catch(() => {});
 
@@ -134,11 +164,13 @@ export default function HomePage() {
     } catch {
       // Ignore
     }
-    notify(
-      nextMode === 'tech'
-        ? 'Đã chuyển sang Chế độ Công nghệ (hiện thông số phân tích sâu).'
-        : 'Đã chuyển sang Chế độ Đơn giản mặc định.'
-    );
+    notify(MODE_TOAST[nextMode]);
+  }
+
+  function handleCycleUiMode() {
+    const idx = MODE_ORDER.indexOf(uiMode);
+    const next = MODE_ORDER[(idx + 1) % MODE_ORDER.length];
+    handleChangeUiMode(next);
   }
 
   function navigateTo(nextScreen: ScreenId) {
@@ -153,6 +185,15 @@ export default function HomePage() {
     stopVietnameseSpeech();
   }
 
+  function refreshRadarSummary() {
+    void fetchRadarReports()
+      .then((d) => {
+        setRadarStats(d.stats);
+        setRecentApproved(d.recentApproved);
+      })
+      .catch(() => {});
+  }
+
   async function handleAnalyze(text: string, autoSpeak = false) {
     const trimmed = text.trim();
     if (!trimmed) {
@@ -161,6 +202,7 @@ export default function HomePage() {
     }
     setToastMsg(null);
     setScannedText(trimmed);
+    setHasScannedOnce(true);
     setActiveScreen('M02');
     setAnalyzing(true);
     const result = await analyzeContentHybrid(trimmed, { offlineMode });
@@ -172,9 +214,14 @@ export default function HomePage() {
   async function handleAnalyzeImage(base64: string, mimeType: string, label: string) {
     setToastMsg(null);
     setScannedText(label);
+    setHasScannedOnce(true);
     setActiveScreen('M02');
     setAnalyzing(true);
-    const result = await analyzeContentHybrid('', { offlineMode, imageBase64: base64, imageMimeType: mimeType });
+    const result = await analyzeContentHybrid('', {
+      offlineMode,
+      imageBase64: base64,
+      imageMimeType: mimeType,
+    });
     if (result.extractedText) setScannedText(result.extractedText);
     setScanResult(result);
     setAnalyzing(false);
@@ -183,6 +230,7 @@ export default function HomePage() {
   function handlePreviewPreset(level: RiskLevel) {
     const text = PRESET_INPUTS[level];
     setScannedText(text);
+    setHasScannedOnce(true);
     setScanResult(runLayerOneRules(text));
     setActiveScreen('M02');
   }
@@ -191,7 +239,7 @@ export default function HomePage() {
     const token = ++flowTokenRef.current;
     const isAlive = () => flowTokenRef.current === token;
 
-    setSeniorMode(false);
+    setUiMode('standard');
     setToastMsg(null);
     setActiveScreen('M01');
     setGuideStep({ targetUi: 'chip-sample-police', caption: 'Cún chọn mẫu giả Công an...', phase: 'aim' });
@@ -205,16 +253,31 @@ export default function HomePage() {
     await handleAnalyze(PRESET_INPUTS.danger, true);
     if (!isAlive()) return;
 
-    setGuideStep({ targetUi: 'btn-speak-alert', caption: 'Cún đọc to cảnh báo NGUY HIỂM...', phase: 'click', mood: 'alert' });
+    setGuideStep({
+      targetUi: 'btn-speak-alert',
+      caption: 'Cún đọc to cảnh báo NGUY HIỂM...',
+      phase: 'click',
+      mood: 'alert',
+    });
     await sleep(1400);
     if (!isAlive()) return;
 
-    setGuideStep({ targetUi: 'btn-ask-family-cta', caption: 'Cún bấm dẫn tới Hỏi người thân...', phase: 'click', mood: 'alert' });
+    setGuideStep({
+      targetUi: 'btn-ask-family-cta',
+      caption: 'Cún bấm dẫn tới Hỏi người thân...',
+      phase: 'click',
+      mood: 'alert',
+    });
     await sleep(750);
     if (!isAlive()) return;
 
     setActiveScreen('M03');
-    setGuideStep({ targetUi: 'btn-confirm-send-family', caption: 'Cún dừng tại đây — Bác tự bấm gửi người thân nhé!', phase: 'stop', mood: 'idle' });
+    setGuideStep({
+      targetUi: 'btn-confirm-send-family',
+      caption: 'Cún dừng tại đây — Bạn tự bấm xác nhận gửi người thân nhé!',
+      phase: 'stop',
+      mood: 'idle',
+    });
   }
 
   async function handleRunCunFlow(flow: CunFlowId) {
@@ -228,14 +291,22 @@ export default function HomePage() {
     }
     if (flow === 'report-prefill') {
       setActiveScreen('M04');
-      void speakAlertVietnamese('Cún đã mở sẵn phiếu báo cáo Công an để bác kiểm tra.', 'autofill');
-      setGuideStep({ targetUi: 'btn-submit-report', caption: 'Cún dừng trước nút Gửi — Bạn kiểm tra rồi tự bấm nhé!', phase: 'stop' });
+      void speakAlertVietnamese('Cún đã mở sẵn phiếu báo cáo Công an để bạn kiểm tra.', 'autofill');
+      setGuideStep({
+        targetUi: 'btn-submit-report',
+        caption: 'Cún dừng trước nút Gửi — Bạn kiểm tra rồi tự bấm nhé!',
+        phase: 'stop',
+      });
       return;
     }
     if (flow === 'senior-video') {
-      setSeniorMode(true);
+      setUiMode('minimal');
       setActiveScreen('M01');
-      setGuideStep({ targetUi: 'btn-xem-video', caption: 'Cún bật Chữ lớn 65+ và bấm Xem Video...', phase: 'click' });
+      setGuideStep({
+        targetUi: 'btn-xem-video',
+        caption: 'Cún bật Chế độ Tối giản và bấm Xem Video...',
+        phase: 'click',
+      });
       await sleep(850);
       if (!isAlive()) return;
       setActiveScreen('M05');
@@ -244,7 +315,11 @@ export default function HomePage() {
     }
     setActiveScreen('M07');
     void speakAlertVietnamese('Cún đã mở Radar cảnh báo Đồng Nai.', 'radar');
-    setGuideStep({ targetUi: 'btn-zalo-export', caption: 'Bấm Xuất Zalo để tạo thẻ ảnh cảnh báo khu phố!', phase: 'stop' });
+    setGuideStep({
+      targetUi: 'btn-zalo-export',
+      caption: 'Bấm Xuất Zalo để tạo thẻ ảnh cảnh báo khu phố!',
+      phase: 'stop',
+    });
   }
 
   const trustedName = currentUser?.trustedName ?? localContact.name;
@@ -253,20 +328,13 @@ export default function HomePage() {
   return (
     <MobileShell
       activeScreen={activeScreen}
-      seniorMode={seniorMode}
       offlineMode={offlineMode}
       wideRadar={wideRadar}
       uiMode={uiMode}
       currentUser={currentUser}
       toastMessage={toastMsg}
       onNavigate={navigateTo}
-      onToggleSenior={() => {
-        setSeniorMode((prev) => {
-          const next = !prev;
-          notify(next ? 'Đã bật Chế độ Người cao tuổi (65+)' : 'Đã quay về Chế độ Tiêu chuẩn');
-          return next;
-        });
-      }}
+      onCycleUiMode={handleCycleUiMode}
       onOpenMascot={() => {
         stopGuide();
         setCunOpen(true);
@@ -274,15 +342,27 @@ export default function HomePage() {
     >
       {activeScreen === 'M01' && (
         <HomeScreen
-          seniorMode={seniorMode}
           uiMode={uiMode}
           trustedName={trustedName}
           trustedPhone={trustedPhone}
+          hasCustomContact={hasCustomContact || Boolean(currentUser)}
+          hasScannedOnce={hasScannedOnce}
+          currentUser={currentUser}
           radarStats={radarStats}
+          recentApproved={recentApproved}
+          onChangeUiMode={handleChangeUiMode}
           onNavigate={navigateTo}
+          onOpenVideoAt={(idx) => {
+            setVideoStartIdx(idx);
+            navigateTo('M05');
+          }}
           onAnalyze={(t) => void handleAnalyze(t)}
           onAnalyzeImage={(b64, mime, lbl) => void handleAnalyzeImage(b64, mime, lbl)}
           onNotify={notify}
+          onOpenLiveVoice={() => {
+            stopGuide();
+            setLiveVoiceOpen(true);
+          }}
           onSpeakWithCun={() => void runAnimatedPoliceFamilyFlow()}
         />
       )}
@@ -294,6 +374,8 @@ export default function HomePage() {
           uiMode={uiMode}
           onNavigate={navigateTo}
           onPreviewPreset={handlePreviewPreset}
+          onNotify={notify}
+          onReportSubmitted={refreshRadarSummary}
         />
       )}
       {activeScreen === 'M03' && (
@@ -301,7 +383,10 @@ export default function HomePage() {
           scannedText={scannedText}
           scanResult={scanResult}
           currentUser={currentUser}
-          onContactLocalSaved={(name, phone) => setLocalContact({ name, phone })}
+          onContactLocalSaved={(name, phone) => {
+            setLocalContact({ name, phone });
+            setHasCustomContact(true);
+          }}
           onUserUpdated={setCurrentUser}
           onNavigate={navigateTo}
           onNotify={notify}
@@ -312,9 +397,7 @@ export default function HomePage() {
           key={scannedText || 'empty'}
           scannedText={scannedText}
           onNotify={notify}
-          onReportSubmitted={() => {
-            void fetchRadarReports().then((d) => setRadarStats(d.stats)).catch(() => {});
-          }}
+          onReportSubmitted={refreshRadarSummary}
         />
       )}
       {activeScreen === 'M05' && (
@@ -340,6 +423,8 @@ export default function HomePage() {
         <RadarScreen
           wideRadar={wideRadar}
           uiMode={uiMode}
+          trustedName={trustedName}
+          trustedPhone={trustedPhone}
           currentUser={currentUser}
           onToggleWide={() => setWideRadar((prev) => !prev)}
           onNavigate={navigateTo}
@@ -353,7 +438,11 @@ export default function HomePage() {
           onToggleOffline={() => {
             setOfflineMode((prev) => {
               const next = !prev;
-              notify(next ? 'Đang giả lập mất mạng: dùng Luật an toàn trên máy' : 'Đã khôi phục kết nối AI trực tuyến');
+              notify(
+                next
+                  ? 'Đang giả lập mất mạng: dùng Luật an toàn trên máy'
+                  : 'Đã khôi phục kết nối AI trực tuyến'
+              );
               return next;
             });
           }}
@@ -364,9 +453,7 @@ export default function HomePage() {
         <AccountScreen
           currentUser={currentUser}
           uiMode={uiMode}
-          seniorMode={seniorMode}
           onChangeUiMode={handleChangeUiMode}
-          onToggleSenior={() => setSeniorMode((p) => !p)}
           onAuthChanged={setCurrentUser}
           onNavigate={navigateTo}
           onNotify={notify}
@@ -381,6 +468,23 @@ export default function HomePage() {
         onNavigate={navigateTo}
         onAnalyzeText={(t) => void handleAnalyze(t)}
       />
+      {liveVoiceOpen && (
+        <LiveVoiceGuardModal
+          open={liveVoiceOpen}
+          trustedName={trustedName}
+          onClose={() => setLiveVoiceOpen(false)}
+          onAnalyzeText={(captured) => {
+            setLiveVoiceOpen(false);
+            void handleAnalyze(captured, true);
+          }}
+          onAskFamily={(captured) => {
+            setLiveVoiceOpen(false);
+            setScannedText(captured);
+            setScanResult(runLayerOneRules(captured));
+            navigateTo('M03');
+          }}
+        />
+      )}
       <CunAiGuideOverlay active={Boolean(guideStep)} step={guideStep} onStop={stopGuide} />
     </MobileShell>
   );

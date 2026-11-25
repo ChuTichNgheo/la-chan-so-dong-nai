@@ -1,9 +1,25 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle2, Flag, Globe, Loader2, PhoneCall, ShieldAlert, Square, Volume2 } from 'lucide-react';
+import {
+  Brain,
+  CheckCircle2,
+  Copy,
+  Flag,
+  Globe,
+  Loader2,
+  MessageSquareQuote,
+  PhoneCall,
+  Send,
+  ShieldAlert,
+  Square,
+  Volume2,
+} from 'lucide-react';
 import { AlertBadge } from '@/components/AlertBadge';
 import { RISK_LEVEL_META } from '@/config/theme';
+import { computePsychologyAndEscape } from '@/data/local-rules';
+import { extractReportPrefill } from '@/lib/report-prefill';
+import { submitNewReport } from '@/lib/report-store';
 import { speakAlertVietnamese, stopVietnameseSpeech } from '@/lib/speech';
 import type { AnalyzeResult, RiskLevel, ScreenId, UiMode } from '@/types';
 
@@ -14,6 +30,8 @@ interface ScannerScreenProps {
   uiMode: UiMode;
   onNavigate: (screen: ScreenId) => void;
   onPreviewPreset: (level: RiskLevel) => void;
+  onNotify: (msg: string) => void;
+  onReportSubmitted?: () => void;
 }
 
 const SOURCE_LABELS: Record<AnalyzeResult['source'], string> = {
@@ -55,6 +73,12 @@ function renderHighlightedSnippet(text: string, highlights: string[], level: Ris
   );
 }
 
+function getBarColor(score: number): string {
+  if (score >= 70) return 'bg-[#DC2626]';
+  if (score >= 40) return 'bg-[#F59E0B]';
+  return 'bg-[#14B8A6]';
+}
+
 export function ScannerScreen({
   scannedText,
   result,
@@ -62,8 +86,12 @@ export function ScannerScreen({
   uiMode,
   onNavigate,
   onPreviewPreset,
+  onNotify,
+  onReportSubmitted,
 }: ScannerScreenProps) {
   const [speaking, setSpeaking] = useState(false);
+  const [quickSending, setQuickSending] = useState(false);
+  const [quickSentFor, setQuickSentFor] = useState<{ text: string; id: string } | null>(null);
 
   async function handleSpeakToggle(speechText: string, level: RiskLevel) {
     if (speaking) {
@@ -74,6 +102,40 @@ export function ScannerScreen({
     setSpeaking(true);
     await speakAlertVietnamese(speechText, level);
     setTimeout(() => setSpeaking(false), 6000);
+  }
+
+  async function handleCopyEscape(script: string) {
+    try {
+      await navigator.clipboard.writeText(script);
+      onNotify('Đã sao chép câu nói thoát thân an toàn!');
+    } catch {
+      onNotify('Hãy đọc to câu mẫu để đáp lại và cúp máy ngay!');
+    }
+  }
+
+  async function handleQuickSendToAdmin() {
+    if (!scannedText.trim() || quickSending) return;
+    setQuickSending(true);
+    try {
+      const prefill = extractReportPrefill(scannedText);
+      const target =
+        prefill.target.trim() ||
+        result?.highlights?.[0] ||
+        scannedText.trim().slice(0, 60);
+      const res = await submitNewReport({
+        type: prefill.type,
+        target,
+        area: 'Đồng Nai (Tự gửi từ M02)',
+        description: prefill.description || scannedText.trim().slice(0, 220),
+      });
+      setQuickSentFor({ text: scannedText, id: res.report.id });
+      onReportSubmitted?.();
+      onNotify(`Đã đẩy ${res.report.id} vào hàng chờ duyệt của Quản trị viên Đội TNTN!`);
+    } catch (err) {
+      onNotify(err instanceof Error ? err.message : 'Không thể đẩy nhanh về hàng chờ duyệt.');
+    } finally {
+      setQuickSending(false);
+    }
   }
 
   if (loading) {
@@ -100,7 +162,7 @@ export function ScannerScreen({
           </div>
           <div className="flex items-center gap-2 rounded-2xl bg-[#F4FBF8] p-3 font-bold text-[#0D685E]">
             <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
-            <span>Bước 2: AI phân tích ngữ cảnh &amp; dấu hiệu thao túng...</span>
+            <span>Bước 2: AI phân tích 3 đòn tâm lý thao túng &amp; gợi ý thoát thân...</span>
           </div>
         </div>
       </section>
@@ -142,6 +204,18 @@ export function ScannerScreen({
   }
 
   const meta = RISK_LEVEL_META[result.level];
+  const fallbackExtra = computePsychologyAndEscape(scannedText || result.title, result.level);
+  const psych = result.psychologyMetrics ?? fallbackExtra.psychologyMetrics;
+  const escapeScript = result.escapeScript ?? fallbackExtra.escapeScript;
+  const showPsychCard = result.level === 'danger' || result.level === 'warn' || uiMode === 'pro';
+  const showQuickAdminPush = result.level === 'danger' || result.level === 'warn';
+  const alreadyPushedId = quickSentFor?.text === scannedText ? quickSentFor.id : null;
+
+  const psychRows = [
+    { label: 'Gây hoảng loạn / Đe dọa', value: psych.panic },
+    { label: 'Ép chuyển tiền / Hành động gấp', value: psych.urgency },
+    { label: 'Cô lập nạn nhân / Giữ bí mật', value: psych.isolation },
+  ];
 
   return (
     <section className="space-y-4" data-screen="M02">
@@ -168,10 +242,11 @@ export function ScannerScreen({
         ))}
       </div>
 
+      {/* Main Verdict Card */}
       <div className={`rounded-3xl border-2 p-4 shadow-sm ${meta.bgClass} ${meta.borderClass}`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <AlertBadge level={result.level} customLabel={result.badge} />
-          {uiMode === 'tech' && (
+          {uiMode === 'pro' && (
             <span className="text-[11px] font-bold text-[#475569]">{SOURCE_LABELS[result.source]}</span>
           )}
         </div>
@@ -193,11 +268,11 @@ export function ScannerScreen({
           </div>
         )}
 
-        {uiMode === 'tech' && result.urlReports && result.urlReports.length > 0 && (
+        {uiMode === 'pro' && result.urlReports && result.urlReports.length > 0 && (
           <div className="mt-3 space-y-2 rounded-2xl bg-white/90 p-3 text-xs">
             <div className="flex items-center gap-1.5 font-extrabold text-[#0D685E]">
               <Globe className="h-3.5 w-3.5" aria-hidden="true" />
-              Phân tích kỹ thuật đường link (Chế độ Công nghệ)
+              Phân tích kỹ thuật đường link (Chế độ Chuyên sâu)
             </div>
             {result.urlReports.map((u, idx) => (
               <div key={idx} className="rounded-xl bg-[#F4FBF8] p-2.5 text-[11px]">
@@ -246,10 +321,102 @@ export function ScannerScreen({
             className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl bg-white px-3 text-xs font-extrabold text-[#991B1B] shadow-sm"
           >
             <Flag className="h-4 w-4" aria-hidden="true" />
-            Báo cáo ngay
+            Hồ sơ Công an
           </button>
         </div>
       </div>
+
+      {/* 3 Psychology Manipulation Bars */}
+      {showPsychCard && (
+        <div className="space-y-3 rounded-3xl bg-white p-4 shadow-[0_6px_22px_rgba(13,104,94,0.06)]">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 font-[family-name:var(--font-lexend)] text-sm font-extrabold text-[#0F172A]">
+              <Brain className="h-4 w-4 text-[#0D685E]" aria-hidden="true" />
+              Phân tích 3 Đòn Tâm Lý Thao Túng
+            </div>
+            <span className="rounded-full bg-[#F4FBF8] px-2.5 py-0.5 text-[10px] font-bold text-[#0D685E]">
+              AI Radar
+            </span>
+          </div>
+          <div className="space-y-2.5">
+            {psychRows.map((row) => (
+              <div key={row.label} className="text-xs">
+                <div className="mb-1 flex items-center justify-between font-bold">
+                  <span className="text-[#334155]">{row.label}</span>
+                  <span className="tabular-nums text-[#0F172A]">{row.value}%</span>
+                </div>
+                <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${getBarColor(row.value)}`}
+                    style={{ width: `${row.value}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Safe Escape Script Card */}
+      <div className="space-y-2.5 rounded-3xl border border-[#CBE4DC] bg-white p-4 shadow-[0_6px_20px_rgba(13,104,94,0.05)]">
+        <div className="flex items-center gap-1.5 font-[family-name:var(--font-lexend)] text-sm font-extrabold text-[#0D685E]">
+          <MessageSquareQuote className="h-4 w-4" aria-hidden="true" />
+          Câu nói mẫu để thoát thân an toàn
+        </div>
+        <blockquote className="rounded-2xl bg-[#F4FBF8] p-3 text-xs font-medium italic leading-relaxed text-[#0F172A]">
+          &ldquo;{escapeScript}&rdquo;
+        </blockquote>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => void speakAlertVietnamese(escapeScript, 'safe')}
+            data-screen="M02"
+            data-ui="btn-speak-escape"
+            className="flex min-h-[42px] items-center justify-center gap-1.5 rounded-2xl bg-[#E9FAF5] text-xs font-extrabold text-[#0D685E]"
+          >
+            <Volume2 className="h-4 w-4" aria-hidden="true" />
+            Đọc to câu mẫu
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleCopyEscape(escapeScript)}
+            data-screen="M02"
+            data-ui="btn-copy-escape"
+            className="flex min-h-[42px] items-center justify-center gap-1.5 rounded-2xl bg-slate-100 text-xs font-bold text-[#0F172A]"
+          >
+            <Copy className="h-4 w-4" aria-hidden="true" />
+            Sao chép câu mẫu
+          </button>
+        </div>
+      </div>
+
+      {/* 1-Tap Push to Admin Moderation Queue */}
+      {showQuickAdminPush && (
+        <button
+          type="button"
+          disabled={quickSending || Boolean(alreadyPushedId)}
+          onClick={() => void handleQuickSendToAdmin()}
+          data-screen="M02"
+          data-ui="btn-quick-push-admin"
+          className={`flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl px-4 text-xs font-extrabold transition ${
+            alreadyPushedId
+              ? 'bg-[#ECFDF5] text-[#065F46]'
+              : 'bg-[#0D685E] text-white shadow-[0_6px_18px_rgba(13,104,94,0.22)] hover:bg-[#09524A]'
+          }`}
+        >
+          {alreadyPushedId ? (
+            <>
+              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+              Đã đẩy {alreadyPushedId} về hàng chờ duyệt Đội TNTN
+            </>
+          ) : (
+            <>
+              <Send className="h-4 w-4" aria-hidden="true" />
+              {quickSending ? 'Đang gửi về Đội TNTN...' : 'Đẩy nhanh về hàng chờ duyệt Đội TNTN (1 chạm)'}
+            </>
+          )}
+        </button>
+      )}
 
       <button
         type="button"

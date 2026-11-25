@@ -1,17 +1,39 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Download, RefreshCw, Share2, ShieldCheck } from 'lucide-react';
+import {
+  Copy,
+  Download,
+  Loader2,
+  QrCode,
+  RefreshCw,
+  Share2,
+  ShieldCheck,
+  Sparkles,
+} from 'lucide-react';
 import { INITIAL_RADAR_STATS } from '@/data/mock-radar';
 import { fetchRadarReports, moderateReportStatus } from '@/lib/report-store';
-import { renderZaloAlertCardDataUrl } from '@/lib/zalo-card-canvas';
-import type { AppUserProfile, RadarBreakdownItem, RadarStats, ScamReport, ScreenId, UiMode } from '@/types';
+import {
+  renderFridgeQrPosterDataUrl,
+  renderZaloAlertCardDataUrl,
+} from '@/lib/zalo-card-canvas';
+import type {
+  AppUserProfile,
+  RadarBreakdownItem,
+  RadarStats,
+  ScamReport,
+  ScreenId,
+  UiMode,
+} from '@/types';
 import { AdminModerationPanel } from './AdminModerationPanel';
+import { DONG_NAI_AREAS, DongNaiHotspotGrid } from './DongNaiHotspotGrid';
 import { RadarLookupCard } from './RadarLookupCard';
 
 interface RadarScreenProps {
   wideRadar: boolean;
   uiMode: UiMode;
+  trustedName: string;
+  trustedPhone: string;
   currentUser: AppUserProfile | null;
   onToggleWide: () => void;
   onNavigate: (screen: ScreenId) => void;
@@ -29,6 +51,8 @@ const TONE_CLASSES: Record<RadarBreakdownItem['tone'], string> = {
 export function RadarScreen({
   wideRadar,
   uiMode,
+  trustedName,
+  trustedPhone,
   currentUser,
   onToggleWide,
   onNavigate,
@@ -39,8 +63,13 @@ export function RadarScreen({
   const [queue, setQueue] = useState<ScamReport[]>([]);
   const [recentApproved, setRecentApproved] = useState<ScamReport[]>([]);
   const [sourceLabel, setSourceLabel] = useState<'supabase' | 'fallback'>('fallback');
+  const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [tableView, setTableView] = useState(false);
-  const [zaloPreview, setZaloPreview] = useState<string | null>(null);
+  const [zaloPreview, setZaloPreview] = useState<{ url: string; title: string; filename: string } | null>(null);
+  const [showFullPhoneOnPoster, setShowFullPhoneOnPoster] = useState(false);
+  const [generatingPoster, setGeneratingPoster] = useState(false);
+  const [bulletinText, setBulletinText] = useState<string | null>(null);
+  const [bulletinLoading, setBulletinLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const applyRadarData = useCallback(
@@ -82,12 +111,91 @@ export function RadarScreen({
     await loadData();
   }
 
+  async function handleSyncedIntel(fallbackInserted?: ScamReport[]) {
+    if (fallbackInserted && fallbackInserted.length > 0) {
+      setQueue((prev) => [...fallbackInserted, ...prev]);
+      setStats((prev) => ({ ...prev, pendingCount: prev.pendingCount + fallbackInserted.length }));
+      return;
+    }
+    await loadData();
+  }
+
+  async function handleGenerateFridgePoster(fullPhone = showFullPhoneOnPoster) {
+    setGeneratingPoster(true);
+    try {
+      const url = await renderFridgeQrPosterDataUrl({
+        areaLabel: selectedArea || 'Đồng Nai',
+        trustedName: trustedName.split('(')[0].trim() || 'Người thân',
+        trustedPhone,
+        showFullPhone: fullPhone,
+      });
+      if (url) {
+        setZaloPreview({
+          url,
+          title: `Poster QR Dán Tủ Lạnh — ${selectedArea || 'Đồng Nai'} (.png)`,
+          filename: 'poster-qr-tu-lanh-dong-nai.png',
+        });
+        onNotify('Đã tạo Poster QR mở thẳng Chế độ Tối giản!');
+      }
+    } finally {
+      setGeneratingPoster(false);
+    }
+  }
+
+  async function handleGenerateZaloBulletin() {
+    setBulletinLoading(true);
+    try {
+      const res = await fetch('/api/admin/zalo-bulletin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          area: selectedArea || 'Toàn tỉnh Đồng Nai',
+          stats,
+          recentApproved: filteredApproved,
+        }),
+      });
+      const data = (await res.json()) as { bulletin?: string; source?: string };
+      if (data.bulletin) {
+        setBulletinText(data.bulletin);
+        onNotify(
+          data.source === 'gemini'
+            ? 'Gemini AI đã soạn xong Bản tin Zalo khu phố!'
+            : 'Đã tạo Bản tin Zalo khu phố chuẩn mẫu!'
+        );
+      }
+    } catch {
+      onNotify('Không thể tạo bản tin lúc này.');
+    } finally {
+      setBulletinLoading(false);
+    }
+  }
+
+  async function handleCopyBulletin() {
+    if (!bulletinText) return;
+    try {
+      await navigator.clipboard.writeText(bulletinText);
+      onNotify('Đã sao chép Bản tin Zalo — dán ngay vào nhóm khu phố!');
+    } catch {
+      onNotify('Bạn hãy bôi đen và copy đoạn bản tin bên trên.');
+    }
+  }
+
+  const areaObj = selectedArea ? DONG_NAI_AREAS.find((a) => a.name === selectedArea) : null;
+  const filteredApproved = areaObj
+    ? recentApproved.filter((r) =>
+        areaObj.matchKeys.some((k) => r.area.toLowerCase().includes(k))
+      )
+    : recentApproved;
+  const filteredQueue = areaObj
+    ? queue.filter((r) => areaObj.matchKeys.some((k) => r.area.toLowerCase().includes(k)))
+    : queue;
+
   return (
     <section className="space-y-4" data-screen="M07">
       <div className="flex flex-wrap items-center justify-between gap-2 px-1">
         <div>
           <div className="text-[11px] font-extrabold uppercase text-[#0D685E]">
-            Radar Đồng Nai{uiMode === 'tech' ? ` • ${sourceLabel}` : ''}
+            Radar Đồng Nai{uiMode === 'pro' ? ` • ${sourceLabel}` : ''}
           </div>
           <h1 className="font-[family-name:var(--font-lexend)] text-xl font-extrabold text-[#0F172A]">
             Cảnh báo Cộng đồng
@@ -111,16 +219,6 @@ export function RadarScreen({
           >
             {wideRadar ? 'Thu gọn' : 'Bản rộng'}
           </button>
-          <button
-            type="button"
-            onClick={() => setZaloPreview(renderZaloAlertCardDataUrl(stats))}
-            data-screen="M07"
-            data-ui="btn-zalo-export"
-            className="inline-flex items-center gap-1 rounded-full bg-[#F59E0B] px-3 py-1.5 text-xs font-extrabold text-[#0F172A] shadow-sm"
-          >
-            <Share2 className="h-3.5 w-3.5" aria-hidden="true" />
-            Xuất Zalo
-          </button>
         </div>
       </div>
 
@@ -140,6 +238,143 @@ export function RadarScreen({
           <div className="text-[11px] text-[#475569]">Chờ xác minh</div>
         </div>
       </div>
+
+      {/* Interactive Đồng Nai Localities Hotspot Map/Grid */}
+      <DongNaiHotspotGrid
+        selectedArea={selectedArea}
+        recentApproved={recentApproved}
+        queue={queue}
+        onSelectArea={setSelectedArea}
+      />
+
+      {/* Youth Union Outreach Toolkit (3 1-tap actions) */}
+      <div className="space-y-2.5 rounded-3xl bg-white p-4 shadow-[0_6px_22px_rgba(13,104,94,0.06)]">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-extrabold text-[#0F172A]">
+            Bộ công cụ tuyên truyền Tổ CNSCĐ
+          </h2>
+          <span className="rounded-full bg-[#E9FAF5] px-2.5 py-0.5 text-[10px] font-bold text-[#0D685E]">
+            {selectedArea || 'Toàn tỉnh'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              const url = renderZaloAlertCardDataUrl(stats, selectedArea || 'ĐỒNG NAI');
+              if (url) {
+                setZaloPreview({
+                  url,
+                  title: `Thẻ cảnh báo Zalo — ${selectedArea || 'Đồng Nai'} (.png)`,
+                  filename: 'canh-bao-zalo-dong-nai.png',
+                });
+              }
+            }}
+            data-screen="M07"
+            data-ui="btn-zalo-export"
+            className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-[#FFFBEB] p-2.5 text-center text-[11px] font-extrabold text-[#92400E] transition hover:bg-[#FEF3C7]"
+          >
+            <Share2 className="h-4 w-4 text-[#D97706]" aria-hidden="true" />
+            <span>Thẻ Zalo</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={generatingPoster}
+            onClick={() => void handleGenerateFridgePoster()}
+            data-screen="M07"
+            data-ui="btn-fridge-qr-poster"
+            className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-[#E9FAF5] p-2.5 text-center text-[11px] font-extrabold text-[#0D685E] transition hover:bg-[#D1FAE5]"
+          >
+            {generatingPoster ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <QrCode className="h-4 w-4" aria-hidden="true" />
+            )}
+            <span>Poster QR nhà</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={bulletinLoading}
+            onClick={() => void handleGenerateZaloBulletin()}
+            data-screen="M07"
+            data-ui="btn-ai-zalo-bulletin"
+            className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-[#0D685E] p-2.5 text-center text-[11px] font-extrabold text-white transition hover:bg-[#09524A]"
+          >
+            {bulletinLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Sparkles className="h-4 w-4 text-[#FCD34D]" aria-hidden="true" />
+            )}
+            <span>AI soạn tin Zalo</span>
+          </button>
+        </div>
+      </div>
+
+      {/* AI Zalo Bulletin Preview */}
+      {bulletinText && (
+        <div className="space-y-2.5 rounded-3xl border border-[#CBE4DC] bg-white p-4 shadow-[0_8px_24px_rgba(13,104,94,0.08)]">
+          <div className="flex items-center justify-between text-xs font-extrabold text-[#0D685E]">
+            <span>Bản tin Cảnh báo Tuần ({selectedArea || 'Đồng Nai'})</span>
+            <button type="button" onClick={() => setBulletinText(null)} className="text-[#475569]">
+              Đóng
+            </button>
+          </div>
+          <textarea
+            value={bulletinText}
+            onChange={(e) => setBulletinText(e.target.value)}
+            rows={7}
+            className="w-full rounded-2xl bg-[#F4FBF8] p-3 text-xs leading-relaxed text-[#0F172A] outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => void handleCopyBulletin()}
+            className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-2xl bg-[#0D685E] text-xs font-extrabold text-white"
+          >
+            <Copy className="h-4 w-4" aria-hidden="true" />
+            Sao chép gửi ngay vào nhóm Zalo khu phố
+          </button>
+        </div>
+      )}
+
+      {/* PNG Preview (Zalo Card or Fridge QR Poster) */}
+      {zaloPreview && (
+        <div className="space-y-2.5 rounded-3xl bg-white p-4 shadow-[0_8px_28px_rgba(13,104,94,0.1)]">
+          <div className="flex items-center justify-between gap-2 text-xs font-extrabold text-[#0D685E]">
+            <span className="truncate">{zaloPreview.title}</span>
+            <button type="button" onClick={() => setZaloPreview(null)} className="shrink-0 text-[#475569]">
+              Đóng
+            </button>
+          </div>
+          {zaloPreview.filename.includes('poster-qr') && (
+            <label className="flex cursor-pointer items-center gap-2 rounded-xl bg-[#F4FBF8] px-3 py-2 text-[11px] font-bold text-[#0F172A]">
+              <input
+                type="checkbox"
+                checked={showFullPhoneOnPoster}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setShowFullPhoneOnPoster(next);
+                  void handleGenerateFridgePoster(next);
+                }}
+                className="h-4 w-4 accent-[#0D685E]"
+              />
+              Hiện đủ 10 số SĐT người thân khi in dán trong nhà (mặc định che SĐT)
+            </label>
+          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={zaloPreview.url} alt={zaloPreview.title} className="w-full rounded-2xl border border-slate-100" />
+          <a
+            href={zaloPreview.url}
+            download={zaloPreview.filename}
+            className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-2xl bg-[#0D685E] text-xs font-bold text-white"
+          >
+            <Download className="h-4 w-4" aria-hidden="true" />
+            Tải ảnh (.png) để in hoặc gửi nhóm Zalo
+          </a>
+        </div>
+      )}
 
       <div className={wideRadar ? 'grid grid-cols-2 items-start gap-3.5' : 'space-y-3.5'}>
         <div className="space-y-3.5">
@@ -195,36 +430,44 @@ export function RadarScreen({
             )}
           </div>
 
-          {recentApproved.length > 0 && (
-            <div className="rounded-3xl bg-white p-4 text-xs shadow-[0_6px_22px_rgba(13,104,94,0.06)]">
-              <h2 className="mb-2.5 font-extrabold text-[#991B1B]">Cảnh báo đã xác minh mới nhất</h2>
+          <div className="rounded-3xl bg-white p-4 text-xs shadow-[0_6px_22px_rgba(13,104,94,0.06)]">
+            <h2 className="mb-2.5 font-extrabold text-[#991B1B]">
+              Cảnh báo đã xác minh mới nhất {selectedArea ? `(${selectedArea})` : ''}
+            </h2>
+            {filteredApproved.length === 0 ? (
+              <p className="text-[#475569]">
+                Chưa có báo cáo mới được duyệt riêng tại {selectedArea || 'khu vực này'}.
+              </p>
+            ) : (
               <div className="space-y-2">
-                {recentApproved.map((item) => (
+                {filteredApproved.map((item) => (
                   <div key={item.id} className="rounded-2xl bg-[#FEF2F2] p-2.5 text-[#991B1B]">
                     <strong>{item.type}</strong> ({item.area}):{' '}
                     <span className="tabular-nums font-bold">{item.targetMasked}</span>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {currentUser?.role === 'admin' ? (
           <AdminModerationPanel
-            queue={queue}
+            queue={filteredQueue}
             onModerate={handleModerate}
+            onSyncedIntel={handleSyncedIntel}
             onNotify={onNotify}
           />
         ) : (
           <div className="rounded-3xl bg-[#E9FAF5] p-4 text-xs">
             <div className="flex items-center gap-2 font-extrabold text-[#0D685E]">
               <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-              Khu vực kiểm duyệt dành cho Quản trị Đội TNTN
+              Khu vực kiểm duyệt &amp; Đồng bộ AI dành cho Đội TNTN
             </div>
             <p className="mt-1.5 leading-relaxed text-[#475569]">
-              Người dân xem được số liệu và cảnh báo đã xác minh. Để duyệt báo cáo hoặc thêm luật
-              chặn nóng, vui lòng đăng nhập tài khoản Quản trị.
+              Người dân xem được số liệu, bản đồ điểm nóng và công cụ tạo Poster QR / Bản tin Zalo.
+              Đăng nhập Quản trị (<code>doantn</code>) để tự động quét tin RSS+AI, duyệt báo cáo và
+              thêm luật chặn nóng.
             </p>
             <button
               type="button"
@@ -238,27 +481,6 @@ export function RadarScreen({
           </div>
         )}
       </div>
-
-      {zaloPreview && (
-        <div className="space-y-2.5 rounded-3xl bg-white p-4 shadow-[0_8px_28px_rgba(13,104,94,0.1)]">
-          <div className="flex items-center justify-between text-xs font-extrabold text-[#0D685E]">
-            <span>Thẻ cảnh báo Zalo Khu phố (.png)</span>
-            <button type="button" onClick={() => setZaloPreview(null)} className="text-[#475569]">
-              Đóng
-            </button>
-          </div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={zaloPreview} alt="Thẻ cảnh báo Zalo khu phố" className="w-full rounded-2xl" />
-          <a
-            href={zaloPreview}
-            download="canh-bao-zalo-dong-nai.png"
-            className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-2xl bg-[#0D685E] text-xs font-bold text-white"
-          >
-            <Download className="h-4 w-4" aria-hidden="true" />
-            Tải ảnh thẻ (.png) gửi nhóm Zalo
-          </a>
-        </div>
-      )}
     </section>
   );
 }

@@ -1,6 +1,6 @@
 export type ScreenId = 'M01' | 'M02' | 'M03' | 'M04' | 'M05' | 'M06' | 'M07' | 'M08' | 'M09';
 
-export type UiMode = 'simple' | 'tech';
+export type UiMode = 'minimal' | 'standard' | 'pro';
 
 export type RiskLevel = 'danger' | 'warn' | 'unknown' | 'safe';
 
@@ -49,6 +49,12 @@ export interface AnalyzeRequest {
   imageMimeType?: string;
 }
 
+export interface PsychologyMetrics {
+  panic: number;
+  urgency: number;
+  isolation: number;
+}
+
 export interface AnalyzeResult {
   level: RiskLevel;
   badge: string;
@@ -59,6 +65,8 @@ export interface AnalyzeResult {
   extractedText?: string;
   urlReports?: UrlInspectionReport[];
   communityMatches?: number;
+  psychologyMetrics?: PsychologyMetrics;
+  escapeScript?: string;
   source: 'hybrid' | 'db' | 'offline';
 }
 

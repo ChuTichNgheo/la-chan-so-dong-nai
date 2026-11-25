@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runLayerOneRules } from '@/data/local-rules';
+import { computePsychologyAndEscape, runLayerOneRules } from '@/data/local-rules';
 import { getCurrentUserProfile } from '@/lib/auth';
 import { getSupabaseServerClient } from '@/lib/db';
 import { inspectAllUrlsInText } from '@/lib/url-inspector';
@@ -7,7 +7,7 @@ import type { AnalyzeRequest, AnalyzeResult, RiskLevel, UrlInspectionReport } fr
 
 const SYSTEM_PROMPT = `Bạn là trợ lý phòng chống lừa đảo Lá Chắn Số Đồng Nai.
 Phân tích nội dung tiếng Việt hoặc ảnh chụp màn hình (bao gồm tin nhắn SMS/Zalo, bill chuyển khoản, hoặc mã QR nếu có) và trả về JSON hợp lệ theo schema:
-{"level":"danger|warn|unknown|safe","badge":"string","title":"string","reasons":["3 lý do ngắn"],"highlights":["từ khóa/SĐT/STK/URL"],"speech":"1 câu đọc to tiếng Việt","extractedText":"văn bản, SĐT, STK hoặc link trích từ ảnh/QR nếu có"}
+{"level":"danger|warn|unknown|safe","badge":"string","title":"string","reasons":["3 lý do ngắn"],"highlights":["từ khóa/SĐT/STK/URL"],"speech":"1 câu đọc to tiếng Việt","extractedText":"văn bản, SĐT, STK hoặc link trích từ ảnh/QR nếu có","psychologyMetrics":{"panic":0-100,"urgency":0-100,"isolation":0-100},"escapeScript":"1 câu nói mẫu lịch sự, dứt khoát bằng tiếng Việt để người dùng đáp lại và cúp máy/thoát thân an toàn"}
 Quy tắc an toàn: Tuyệt đối KHÔNG khẳng định "100% an toàn" cho số lạ chưa xác thực.`;
 
 function normalizeCompact(val: string): string {
@@ -100,6 +100,7 @@ export async function POST(request: Request) {
           ],
           highlights: [String(ruleMatch.pattern)],
           speech: String(ruleMatch.note),
+          ...computePsychologyAndEscape(text, lvl),
           urlReports: urlReports.length > 0 ? urlReports : undefined,
           source: 'db',
         };
@@ -139,6 +140,7 @@ export async function POST(request: Request) {
           highlights: [String(first.target)],
           speech:
             'Cảnh báo nguy hiểm! Đối tượng này đã bị cộng đồng Đồng Nai báo cáo lừa đảo và được xác minh.',
+          ...computePsychologyAndEscape(text, 'danger'),
           urlReports: urlReports.length > 0 ? urlReports : undefined,
           communityMatches,
           source: 'db',
@@ -160,6 +162,7 @@ export async function POST(request: Request) {
         ],
         highlights: urlReports.map((u) => u.hostname),
         speech: 'Cảnh báo nguy hiểm! Đường dẫn này có dấu hiệu giả mạo kỹ thuật. Tuyệt đối không bấm vào!',
+        ...computePsychologyAndEscape(text, 'danger'),
         urlReports,
         communityMatches,
         source: 'offline',
@@ -247,6 +250,22 @@ export async function POST(request: Request) {
       finalLevel = 'danger';
     }
 
+    const fallbackPsych = computePsychologyAndEscape(
+      parsed.extractedText || text || '',
+      finalLevel
+    );
+    const validPsych =
+      parsed.psychologyMetrics &&
+      typeof parsed.psychologyMetrics.panic === 'number' &&
+      typeof parsed.psychologyMetrics.urgency === 'number' &&
+      typeof parsed.psychologyMetrics.isolation === 'number'
+        ? {
+            panic: Math.max(0, Math.min(100, Math.round(parsed.psychologyMetrics.panic))),
+            urgency: Math.max(0, Math.min(100, Math.round(parsed.psychologyMetrics.urgency))),
+            isolation: Math.max(0, Math.min(100, Math.round(parsed.psychologyMetrics.isolation))),
+          }
+        : fallbackPsych.psychologyMetrics;
+
     const result: AnalyzeResult = {
       level: finalLevel,
       badge: parsed.badge || layerOne.badge,
@@ -260,6 +279,11 @@ export async function POST(request: Request) {
       extractedText: parsed.extractedText,
       urlReports: extractedUrlReports.length > 0 ? extractedUrlReports : undefined,
       communityMatches,
+      psychologyMetrics: validPsych,
+      escapeScript:
+        typeof parsed.escapeScript === 'string' && parsed.escapeScript.trim().length > 10
+          ? parsed.escapeScript.trim()
+          : fallbackPsych.escapeScript,
       source: 'hybrid',
     };
 

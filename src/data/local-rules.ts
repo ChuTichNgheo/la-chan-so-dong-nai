@@ -1,5 +1,105 @@
 import { extractUrlsFromText } from '@/lib/url-inspector';
-import type { AnalyzeResult } from '@/types';
+import type { AnalyzeResult, PsychologyMetrics, RiskLevel } from '@/types';
+
+const PANIC_TERMS = [
+  'công an',
+  'viện kiểm sát',
+  'khởi tố',
+  'lệnh bắt',
+  'tạm giữ',
+  'rửa tiền',
+  'tai nạn',
+  'cấp cứu',
+  'khóa sim',
+  'cắt điện',
+  'phong tỏa',
+];
+
+const URGENCY_TERMS = [
+  'ngay hôm nay',
+  'ngay lập tức',
+  'trong 2 giờ',
+  'gấp',
+  'khẩn',
+  'hết hạn',
+  'chuyển tiền',
+  'nạp trước',
+  'mã otp',
+  'otp',
+];
+
+const ISOLATION_TERMS = [
+  'bí mật',
+  'đừng nói',
+  'không kể',
+  'một mình',
+  'phòng kín',
+  'không báo',
+  'xác minh riêng',
+  'cài ứng dụng',
+  '.apk',
+];
+
+export function computePsychologyAndEscape(
+  rawText: string,
+  level: RiskLevel
+): { psychologyMetrics: PsychologyMetrics; escapeScript: string } {
+  const lower = rawText.toLowerCase();
+  const panicCount = PANIC_TERMS.filter((t) => lower.includes(t)).length;
+  const urgencyCount = URGENCY_TERMS.filter((t) => lower.includes(t)).length;
+  const isolationCount = ISOLATION_TERMS.filter((t) => lower.includes(t)).length;
+
+  const base =
+    level === 'danger' ? { panic: 78, urgency: 76, isolation: 64 }
+    : level === 'warn' ? { panic: 44, urgency: 68, isolation: 42 }
+    : level === 'unknown' ? { panic: 22, urgency: 28, isolation: 18 }
+    : { panic: 5, urgency: 5, isolation: 5 };
+
+  const clamp = (v: number) => Math.max(5, Math.min(98, v));
+  const psychologyMetrics: PsychologyMetrics = {
+    panic: clamp(base.panic + panicCount * 9),
+    urgency: clamp(base.urgency + urgencyCount * 10),
+    isolation: clamp(base.isolation + isolationCount * 14),
+  };
+
+  if (lower.includes('công an') || lower.includes('khởi tố') || lower.includes('lệnh bắt')) {
+    return {
+      psychologyMetrics,
+      escapeScript:
+        'Tôi sẽ gọi trực tiếp lên Công an phường hoặc ra trụ sở làm việc theo giấy mời chính thức. Tôi không chuyển tiền hay cung cấp thông tin qua điện thoại. Xin phép cúp máy!',
+    };
+  }
+
+  if (lower.includes('việc nhẹ') || lower.includes('ctv') || lower.includes('nạp trước') || lower.includes('nhiệm vụ')) {
+    return {
+      psychologyMetrics,
+      escapeScript:
+        'Cảm ơn, tôi không tham gia công việc yêu cầu nạp tiền trước hay bấm đường dẫn ngoài ứng dụng chính thức. Tôi xin dừng trao đổi tại đây.',
+    };
+  }
+
+  if (lower.includes('khóa sim') || lower.includes('cắt điện') || lower.includes('vneid') || lower.includes('sinh trắc')) {
+    return {
+      psychologyMetrics,
+      escapeScript:
+        'Tôi sẽ tự mở ứng dụng chính chủ hoặc gọi tổng đài chính thức để kiểm tra, không bấm đường link lạ hay cài tệp ngoài cửa hàng ứng dụng.',
+    };
+  }
+
+  if (level === 'safe') {
+    return {
+      psychologyMetrics,
+      escapeScript:
+        'Đây là địa chỉ chính thống đã xác thực. Bạn vẫn nên tự kiểm tra kỹ chính tả tên miền trên thanh địa chỉ trước khi đăng nhập.',
+    };
+  }
+
+  return {
+    psychologyMetrics,
+    escapeScript:
+      'Để tôi tạm dừng và gọi xác minh với người thân hoặc cơ quan chính thức trước, tôi không chuyển tiền và không đọc mã OTP lúc này.',
+  };
+}
 
 const POLICE_SCAM_KEYWORDS = [
   'công an',
@@ -86,7 +186,8 @@ export function runLayerOneRules(rawText: string): AnalyzeResult {
       ],
       highlights: policeHits,
       speech:
-        'Cảnh báo nguy hiểm! Công an không bao giờ yêu cầu chuyển tiền qua điện thoại. Bác hãy tắt máy ngay và hỏi người thân nhé!',
+        'Cảnh báo nguy hiểm! Công an không bao giờ yêu cầu chuyển tiền qua điện thoại. Bạn hãy tắt máy ngay và hỏi người thân nhé!',
+      ...computePsychologyAndEscape(text, 'danger'),
       source: 'offline',
     };
   }
@@ -106,6 +207,7 @@ export function runLayerOneRules(rawText: string): AnalyzeResult {
       highlights: [...jobHits, ...linkHits],
       speech:
         'Cảnh báo nghi ngờ! Đây là dấu hiệu bẫy việc nhẹ lương cao. Tuyệt đối không nạp tiền mở nhiệm vụ hay bấm link lạ.',
+      ...computePsychologyAndEscape(text, 'warn'),
       source: 'offline',
     };
   }
@@ -123,6 +225,7 @@ export function runLayerOneRules(rawText: string): AnalyzeResult {
       highlights: linkHits,
       speech:
         'Cảnh báo nghi ngờ! Đường dẫn này có dấu hiệu bất thường. Tuyệt đối không bấm vào hay cài tệp lạ.',
+      ...computePsychologyAndEscape(text, 'warn'),
       source: 'offline',
     };
   }
@@ -140,6 +243,7 @@ export function runLayerOneRules(rawText: string): AnalyzeResult {
       ],
       highlights: matchedHosts,
       speech: 'Địa chỉ này thuộc danh sách chính thống đã được xác thực.',
+      ...computePsychologyAndEscape(text, 'safe'),
       source: 'offline',
     };
   }
@@ -157,6 +261,7 @@ export function runLayerOneRules(rawText: string): AnalyzeResult {
     highlights: [],
     speech:
       'Chưa ghi nhận cảnh báo với nội dung này, nhưng không đồng nghĩa an toàn một trăm phần trăm. Bạn nhớ giữ cảnh giác nhé!',
+    ...computePsychologyAndEscape(text, 'unknown'),
     source: 'offline',
   };
 }

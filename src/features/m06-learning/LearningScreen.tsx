@@ -4,17 +4,22 @@ import { useEffect, useState } from 'react';
 import {
   Award,
   Clock,
+  Download,
   MessageCircleWarning,
   Play,
   RotateCcw,
+  Share2,
   Shield,
+  Sparkles,
   UserRoundX,
   Video,
 } from 'lucide-react';
 import { CunAiSvg } from '@/components/CunAiMascot';
 import { GAME_QUESTIONS } from '@/data/lessons-game';
 import { LESSONS_DATA, VIDEOS_DATA } from '@/data/videos-data';
+import { renderGameBadgeCardDataUrl } from '@/lib/zalo-card-canvas';
 import type { AppUserProfile } from '@/types';
+import { ScamRoleplayArena } from './ScamRoleplayArena';
 
 interface LearningScreenProps {
   currentUser: AppUserProfile | null;
@@ -29,7 +34,7 @@ export function LearningScreen({
   onOpenVideoAt,
   onNotify,
 }: LearningScreenProps) {
-  const [tab, setTab] = useState<'game' | 'lessons'>('game');
+  const [tab, setTab] = useState<'roleplay' | 'game' | 'lessons'>('roleplay');
   const [started, setStarted] = useState(false);
   const [qIndex, setQIndex] = useState(0);
   const [score, setScore] = useState(0);
@@ -39,6 +44,7 @@ export function LearningScreen({
   const [secondsLeft, setSecondsLeft] = useState(10);
   const [chosenIdx, setChosenIdx] = useState<number | null>(null);
   const [timedOut, setTimedOut] = useState(false);
+  const [badgeCardUrl, setBadgeCardUrl] = useState<string | null>(null);
 
   const outOfLives = lives <= 0;
   const isGameFinished = qIndex >= GAME_QUESTIONS.length || outOfLives;
@@ -115,6 +121,7 @@ export function LearningScreen({
     setSecondsLeft(10);
     setChosenIdx(null);
     setTimedOut(false);
+    setBadgeCardUrl(null);
   }
 
   const badgeTitle = outOfLives
@@ -125,9 +132,36 @@ export function LearningScreen({
     ? 'Thám Tử Số Tiềm Năng'
     : 'Tân Binh Cần Ôn Video';
 
+  async function handleChallengeFamily() {
+    const dataUrl = renderGameBadgeCardDataUrl({
+      playerName: currentUser?.fullName || 'Công dân Số Đồng Nai',
+      badgeTitle,
+      scoreLabel: `${score} điểm (${correctCount}/${GAME_QUESTIONS.length} câu đúng)`,
+      modeLabel: 'Thử thách Phản xạ 10 giây',
+    });
+    if (dataUrl) setBadgeCardUrl(dataUrl);
+
+    const shareUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    const challengeMsg = `🛡️ Tôi vừa đạt ${score} điểm (${badgeTitle}) ở Mini Game Bắt Bài Lừa Đảo 10 giây trên Lá Chắn Số Đồng Nai! Cả nhà thử xem ai đạt điểm cao hơn nhé: ${shareUrl}`;
+
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        await navigator.share({ title: 'Thách đấu Lá Chắn Số Đồng Nai', text: challengeMsg });
+        onNotify('Đã xuất Thẻ Huy Hiệu PNG & chia sẻ thách đấu Gia đình!');
+        return;
+      }
+      await navigator.clipboard.writeText(challengeMsg);
+      onNotify('Đã tạo Thẻ Huy Hiệu PNG & sao chép link thách đấu dán Zalo!');
+    } catch {
+      onNotify('Đã tạo Thẻ Huy Hiệu PNG bên dưới — bấm Tải ảnh để gửi Zalo!');
+    }
+  }
+
   const headerBadge =
-    tab === 'lessons'
-      ? `${LESSONS_DATA.length} bài học 1 phút`
+    tab === 'roleplay'
+      ? 'AI Nhập Vai'
+      : tab === 'lessons'
+      ? `${LESSONS_DATA.length} bài học 1p`
       : !started
       ? `${GAME_QUESTIONS.length} tình huống`
       : outOfLives
@@ -147,32 +181,51 @@ export function LearningScreen({
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5 rounded-2xl bg-white p-1.5 shadow-[0_4px_16px_rgba(13,104,94,0.05)]">
+      {/* 3-Tab Switcher: AI Roleplay | 10s Quiz | 10 Lessons */}
+      <div className="grid grid-cols-3 gap-1 rounded-2xl bg-white p-1.5 shadow-[0_4px_16px_rgba(13,104,94,0.05)]">
+        <button
+          type="button"
+          onClick={() => setTab('roleplay')}
+          data-screen="M06"
+          data-ui="tab-roleplay"
+          className={`inline-flex items-center justify-center gap-1 rounded-xl py-2 text-[11px] font-extrabold transition ${
+            tab === 'roleplay' ? 'bg-[#0D685E] text-white shadow-xs' : 'text-[#475569]'
+          }`}
+        >
+          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+          Đấu trí AI
+        </button>
         <button
           type="button"
           onClick={() => setTab('game')}
           data-screen="M06"
           data-ui="tab-game"
-          className={`rounded-xl py-2 text-xs font-bold transition ${
-            tab === 'game' ? 'bg-[#0D685E] text-white' : 'text-[#475569]'
+          className={`rounded-xl py-2 text-[11px] font-bold transition ${
+            tab === 'game' ? 'bg-[#0D685E] text-white shadow-xs' : 'text-[#475569]'
           }`}
         >
-          Mini Game Bắt Bài
+          Bắt Bài 10s
         </button>
         <button
           type="button"
           onClick={() => setTab('lessons')}
           data-screen="M06"
           data-ui="tab-lessons"
-          className={`rounded-xl py-2 text-xs font-bold transition ${
-            tab === 'lessons' ? 'bg-[#0D685E] text-white' : 'text-[#475569]'
+          className={`rounded-xl py-2 text-[11px] font-bold transition ${
+            tab === 'lessons' ? 'bg-[#0D685E] text-white shadow-xs' : 'text-[#475569]'
           }`}
         >
-          10 Bài học 1 phút
+          10 Bài học
         </button>
       </div>
 
-      {tab === 'game' ? (
+      {tab === 'roleplay' ? (
+        <ScamRoleplayArena
+          currentUser={currentUser}
+          onUserUpdated={onUserUpdated}
+          onNotify={onNotify}
+        />
+      ) : tab === 'game' ? (
         <div className="space-y-3">
           {!started ? (
             <div className="space-y-3.5 rounded-3xl bg-white p-5 text-center shadow-[0_8px_28px_rgba(13,104,94,0.08)]">
@@ -246,11 +299,34 @@ export function LearningScreen({
                   </div>
                   <button
                     type="button"
-                    onClick={() => onNotify('Đã sao chép link Mini Game thách đấu gia đình qua Zalo!')}
-                    className="w-full rounded-2xl bg-[#F59E0B] py-3 text-xs font-extrabold text-[#0F172A]"
+                    onClick={() => void handleChallengeFamily()}
+                    data-screen="M06"
+                    data-ui="btn-challenge-family-png"
+                    className="flex min-h-[46px] w-full items-center justify-center gap-1.5 rounded-2xl bg-[#F59E0B] text-xs font-extrabold text-[#0F172A] shadow-sm"
                   >
-                    Thách đấu cùng Gia đình
+                    <Share2 className="h-4 w-4" aria-hidden="true" />
+                    Xuất Thẻ Huy Hiệu PNG &amp; Thách đấu Gia đình
                   </button>
+
+                  {badgeCardUrl && (
+                    <div className="space-y-2 rounded-2xl bg-[#F4FBF8] p-3 text-left">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={badgeCardUrl}
+                        alt="Thẻ Huy Hiệu Lá Chắn Số Đồng Nai"
+                        className="w-full rounded-xl shadow-sm"
+                      />
+                      <a
+                        href={badgeCardUrl}
+                        download="huy-hieu-la-chan-so-dong-nai.png"
+                        className="flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-xl bg-[#0D685E] text-xs font-extrabold text-white"
+                      >
+                        <Download className="h-4 w-4" aria-hidden="true" />
+                        Tải ảnh Thẻ Huy Hiệu (.png) gửi Zalo
+                      </a>
+                    </div>
+                  )}
+
                   <button
                     type="button"
                     onClick={handleResetGame}
