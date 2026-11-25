@@ -42,13 +42,13 @@ export function MobileShell({
   const containerWidth = wideRadar && activeScreen === 'M07' ? 'max-w-[960px]' : 'max-w-[430px]';
 
   return (
-    <div className="flex min-h-dvh w-full justify-center bg-slate-100">
+    <div className="flex h-dvh w-full justify-center overflow-hidden bg-slate-100">
       <div
-        className={`relative flex min-h-dvh w-full flex-col bg-[#F4FBF8] shadow-xl transition-all ${containerWidth} ${
+        className={`relative flex h-dvh w-full flex-col overflow-hidden bg-[#F4FBF8] shadow-xl transition-all ${containerWidth} ${
           seniorMode ? 'senior-mode' : ''
         }`}
       >
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-2 border-b border-[#CBE4DC] bg-white/95 px-3 py-2.5 backdrop-blur">
+        <header className="z-20 flex shrink-0 items-center justify-between gap-2 border-b border-[#CBE4DC] bg-white/95 px-3 py-2.5 backdrop-blur">
           <BrandLogo />
           <div className="flex items-center gap-1.5">
             <button
@@ -83,18 +83,20 @@ export function MobileShell({
         </header>
 
         {offlineMode && (
-          <div className="flex items-center justify-center gap-1.5 border-b border-[#D97706] bg-[#FFFBEB] px-3 py-1.5 text-xs font-bold text-[#92400E]">
+          <div className="flex shrink-0 items-center justify-center gap-1.5 border-b border-[#D97706] bg-[#FFFBEB] px-3 py-1.5 text-xs font-bold text-[#92400E]">
             <WifiOff className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span>Đang chạy Ngoại tuyến (Tầng 1 Luật tất định)</span>
           </div>
         )}
 
-        <main className="flex-1 overflow-y-auto px-3.5 pt-3.5 pb-24">{children}</main>
+        <main id="app-scroll-main" className="flex-1 overflow-y-auto px-3.5 pt-3.5 pb-16">
+          {children}
+        </main>
 
         {toastMessage && (
           <div
             role="status"
-            className="mx-3 mb-2 flex items-center gap-2 rounded-xl bg-[#0F172A] px-3 py-2 text-xs font-semibold text-white shadow-lg"
+            className="mx-3 mb-1.5 flex shrink-0 items-center gap-2 rounded-xl bg-[#0F172A] px-3 py-2 text-xs font-semibold text-white shadow-lg"
           >
             <Info className="h-4 w-4 shrink-0 text-[#FCD34D]" aria-hidden="true" />
             <span>{toastMessage}</span>
@@ -107,7 +109,7 @@ export function MobileShell({
 
         <nav
           aria-label="Điều hướng chính"
-          className="sticky bottom-0 z-20 grid grid-cols-5 border-t border-[#CBE4DC] bg-white/85 px-1 py-1.5 backdrop-blur-md"
+          className="z-20 grid shrink-0 grid-cols-5 border-t border-[#CBE4DC] bg-white/90 px-1 py-1.5 backdrop-blur-md"
         >
           {BOTTOM_NAV_TABS.map((tab) => {
             const Icon = TAB_ICONS[tab.iconName];

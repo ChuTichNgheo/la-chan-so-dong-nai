@@ -19,9 +19,12 @@ export async function PATCH(
       return NextResponse.json({ error: 'Trạng thái duyệt không hợp lệ.' }, { status: 400 });
     }
 
-    const requiredPin = process.env.VOLUNTEER_PIN;
-    if (requiredPin && body.pin && body.pin !== requiredPin) {
-      return NextResponse.json({ error: 'Sai mã PIN Đoàn viên.' }, { status: 403 });
+    const requiredPin = process.env.VOLUNTEER_PIN?.trim();
+    if (requiredPin && body.pin?.trim() !== requiredPin) {
+      return NextResponse.json(
+        { error: 'Sai hoặc thiếu mã PIN Đoàn viên (mặc định: 1234).' },
+        { status: 403 }
+      );
     }
 
     const supabase = getSupabaseServerClient();

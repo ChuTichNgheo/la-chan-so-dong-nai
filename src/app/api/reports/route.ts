@@ -6,7 +6,7 @@ import {
 } from '@/data/mock-radar';
 import { getSupabaseServerClient } from '@/lib/db';
 import { maskSensitiveTarget } from '@/lib/privacy';
-import type { CreateReportPayload, ReportsApiResponse, ScamReport } from '@/types';
+import type { CreateReportPayload, RadarBreakdownItem, ReportsApiResponse, ScamReport } from '@/types';
 
 interface DbReportRow {
   id: string;
@@ -32,16 +32,46 @@ function mapRow(row: DbReportRow): ScamReport {
   };
 }
 
+function buildBreakdown(approved: ScamReport[]): {
+  breakdown: RadarBreakdownItem[];
+  fakeLinkPercent: number;
+} {
+  let link = 42;
+  let police = 34;
+  let job = 26;
+  let other = 18;
+
+  for (const item of approved) {
+    const t = item.type.toLowerCase();
+    if (t.includes('đường dẫn') || t.includes('link')) link += 1;
+    else if (t.includes('công an') || t.includes('ngân hàng')) police += 1;
+    else if (t.includes('ctv') || t.includes('cộng tác')) job += 1;
+    else other += 1;
+  }
+
+  const total = Math.max(1, link + police + job + other);
+  const fakeLinkPercent = Math.round((link / total) * 100);
+
+  return {
+    fakeLinkPercent,
+    breakdown: [
+      { label: 'Đường dẫn giả mạo (link độc hại)', count: link, percent: fakeLinkPercent, tone: 'danger' },
+      { label: 'Giả danh công an / ngân hàng', count: police, percent: Math.round((police / total) * 100), tone: 'primary' },
+      { label: 'Tuyển CTV việc nhẹ lương cao', count: job, percent: Math.round((job / total) * 100), tone: 'amber' },
+      { label: 'Giả người thân gặp tai nạn / khác', count: other, percent: Math.round((other / total) * 100), tone: 'muted' },
+    ],
+  };
+}
+
 export async function GET() {
   const supabase = getSupabaseServerClient();
   if (!supabase) {
-    const fallback: ReportsApiResponse = {
+    return NextResponse.json<ReportsApiResponse>({
       stats: INITIAL_RADAR_STATS,
       queue: INITIAL_MODERATION_QUEUE,
       recentApproved: [],
       source: 'fallback',
-    };
-    return NextResponse.json(fallback);
+    });
   }
 
   const { data, error } = await supabase
@@ -51,31 +81,30 @@ export async function GET() {
     .limit(100);
 
   if (error || !data) {
-    const fallback: ReportsApiResponse = {
+    return NextResponse.json<ReportsApiResponse>({
       stats: INITIAL_RADAR_STATS,
       queue: INITIAL_MODERATION_QUEUE,
       recentApproved: [],
       source: 'fallback',
-    };
-    return NextResponse.json(fallback);
+    });
   }
 
   const mapped = (data as DbReportRow[]).map(mapRow);
   const queue = mapped.filter((r) => r.status === 'pending');
   const recentApproved = mapped.filter((r) => r.status === 'approved');
+  const { breakdown, fakeLinkPercent } = buildBreakdown(recentApproved);
 
-  const response: ReportsApiResponse = {
+  return NextResponse.json<ReportsApiResponse>({
     stats: {
-      ...INITIAL_RADAR_STATS,
       totalReports: BASELINE_APPROVED_COUNT + recentApproved.length,
+      fakeLinkPercent,
       pendingCount: queue.length,
+      breakdown,
     },
     queue,
-    recentApproved,
+    recentApproved: recentApproved.slice(0, 5),
     source: 'supabase',
-  };
-
-  return NextResponse.json(response);
+  });
 }
 
 export async function POST(request: Request) {

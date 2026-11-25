@@ -4,31 +4,34 @@ interface CunAiSvgProps {
 }
 
 /**
- * Original SVG Mascot: Cún INFINITY AI.
- * Plug-in point: swap with custom artwork in public/assets/ anytime.
+ * Pure Cún INFINITY AI character SVG (no outer circular background).
+ * Plug-in point: swap with custom transparent PNG/SVG in public/assets/ anytime.
  */
-export function CunAiSvg({ size = 36, mood = 'idle' }: CunAiSvgProps) {
+export function CunAiSvg({ size = 34, mood = 'idle' }: CunAiSvgProps) {
   const collarColor = mood === 'alert' ? '#B91C1C' : '#0D685E';
   const badgeBg = mood === 'alert' ? '#FEF2F2' : '#F59E0B';
   const mouthPath =
     mood === 'alert' ? 'M27 42 Q32 37 37 42' : 'M27 39 Q32 44 37 39';
+  const earLeftTransform = mood === 'listening' ? 'rotate(-7 18 20)' : undefined;
+  const earRightTransform = mood === 'listening' ? 'rotate(7 46 20)' : undefined;
 
   return (
     <svg
       width={size}
       height={size}
-      viewBox="0 0 64 64"
+      viewBox="10 6 44 54"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
+      className="drop-shadow-sm"
     >
-      <circle cx="32" cy="32" r="30" fill="#E9FAF5" stroke={collarColor} strokeWidth="2.5" />
       <path
         d="M16 26 L13 11 Q13 8 17 10 L26 17 Z"
         fill="#D97706"
         stroke="#0F172A"
         strokeWidth="2"
         strokeLinejoin="round"
+        transform={earLeftTransform}
       />
       <path
         d="M48 26 L51 11 Q51 8 47 10 L38 17 Z"
@@ -36,6 +39,7 @@ export function CunAiSvg({ size = 36, mood = 'idle' }: CunAiSvgProps) {
         stroke="#0F172A"
         strokeWidth="2"
         strokeLinejoin="round"
+        transform={earRightTransform}
       />
       <ellipse cx="32" cy="33" rx="18" ry="16" fill="#FDE68A" stroke="#0F172A" strokeWidth="2.2" />
       <ellipse cx="32" cy="38" rx="12" ry="9" fill="#FFFFFF" />
@@ -84,13 +88,10 @@ export function CunAiMascot({
       data-screen={screenId}
       data-ui="btn-cun-ai-mascot"
       aria-label="Mở Trợ lý Cún INFINITY AI"
-      className={`fixed bottom-20 z-30 flex items-center gap-2 rounded-full border-2 border-[#14B8A6] bg-[#0D685E] px-2.5 py-1.5 text-white shadow-lg transition hover:bg-[#09524A] md:absolute ${sideClass}`}
+      className={`absolute bottom-[74px] z-30 flex items-center gap-1 rounded-full border border-[#14B8A6] bg-[#0D685E]/95 px-2 py-1 text-white shadow-md backdrop-blur transition hover:bg-[#09524A] ${sideClass}`}
     >
-      <CunAiSvg size={34} mood={mood} />
-      <span className="pr-1 text-left leading-tight">
-        <span className="block text-xs font-extrabold">Cún AI</span>
-        <span className="block text-[10px] text-[#D1FAE5]">Nói để làm giùm</span>
-      </span>
+      <CunAiSvg size={28} mood={mood} />
+      <span className="pr-0.5 text-[11px] font-extrabold">Cún AI</span>
     </button>
   );
 }

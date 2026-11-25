@@ -1,23 +1,22 @@
 # NHẬT KÝ BÀN GIAO AI (Cập nhật mỗi 2 giờ hoặc trước khi đổi AI)
 
 ## Trạng thái hiện tại
-- Giai đoạn: Hoàn thiện Cụm A (M01 + M01b + M02 + Cún AI + Giọng đọc 3 tầng + Audio fallback)
+- Giai đoạn: Đã sửa Cún AI nhỏ gọn (không đè thanh đáy), bỏ viền hộp ngoài, thêm hiệu ứng nhấp/nháy trực tiếp trên nút bấm (`cun-btn-active` / `cun-btn-clicked`) + xong Cụm A & Cụm B.
 - Tính năng đã chạy ổn định:
-  - [x] Khung Next.js 16 App Router + Tailwind + Lucide + Supabase client
-  - [x] `MobileShell` + 5 tab đáy + toast thông báo + Chế độ 65+
-  - [x] M01–M01b–M02: 4 chip mẫu nhanh, Micro giọng nói (`vi-VN`), highlight từ khóa nguy hiểm, chuyển 4 mức cảnh báo, đọc giọng 3 tầng + 13 file `.mp3` trong `public/audio/`
-  - [x] Cún AI SVG + `CunAiSheet` (4 luồng dẫn đường, Human-in-the-Loop)
-  - [ ] Cụm B: Hoàn thiện sâu M04 + M07 (Supabase + PIN + Canvas Zalo) + M03
-  - [ ] Cụm C: Hoàn thiện M05 (Video thật + 10 kịch bản) + M06 (Mini Game 5 màn + 10 bài) + M08
+  - [x] Cụm A: M01, M01b, M02, Giọng đọc 3 tầng + 13 file `.mp3`
+  - [x] `MobileShell`: Khung `h-dvh overflow-hidden` cố định header & 5 tab đáy, nút Cún AI nhỏ gọn `28px` nằm phía trên thanh đáy (`bottom-[74px]`), không che chữ/tab
+  - [x] `CunAiGuideOverlay`: Theo sát tọa độ nút sau khi scroll, áp dụng `.cun-btn-clicked` + badge `"Đã bấm"` trực tiếp trên nút, dừng trước nút xác nhận cuối
+  - [x] Cụm B: M03, M04 (`POST /api/reports`), M07 (Supabase + `VOLUNTEER_PIN` + Xuất thẻ Zalo PNG)
+  - [ ] Cụm C: Hoàn thiện M05 (2 video thật + 10 kịch bản) + M06 (Mini Game 5 màn + 10 bài học) + M08
 
-## Hợp đồng dữ liệu (JSON Contract trong `src/types/index.ts` - Không tự ý đổi tên trường)
-- `POST /api/analyze`: nhận `{ text: string, offline?: boolean }` -> trả `{ level, badge, title, reasons, highlights, speech, source }`
-- `GET /api/reports`: trả `{ stats: RadarStats, queue: ScamReport[], recentApproved: ScamReport[], source }`
-- `POST /api/reports`: nhận `{ type, target, area, description }` -> trả `{ report: ScamReport, source }`
-- `PATCH /api/reports/[id]`: nhận `{ status: 'approved'|'rejected', pin?: string }` -> trả `{ report, source }`
+## Hợp đồng dữ liệu (JSON Contract trong `src/types/index.ts`)
+- `POST /api/analyze` -> `{ level, badge, title, reasons, highlights, speech, source }`
+- `GET /api/reports` -> `{ stats: RadarStats, queue: ScamReport[], recentApproved: ScamReport[], source }`
+- `POST /api/reports` -> `{ report: ScamReport, source }`
+- `PATCH /api/reports/[id]` -> `{ report, source }`
 
 ## Việc tiếp theo cần làm ngay
-- Hoàn thiện Cụm B (M04 + M07 + M03) kết nối Supabase thật.
+- Hoàn thiện Cụm C: M05 (chép 2 video thật + 10 tình huống), M06 (Mini Game 5 màn có đồng hồ 10 giây, 3 lá chắn, chuỗi đúng, huy hiệu + 10 bài học) và M08.
 
 ## Nhật ký Công cụ AI & Thư viện
 - Công cụ hỗ trợ lập trình: Antigravity (Gemini)
