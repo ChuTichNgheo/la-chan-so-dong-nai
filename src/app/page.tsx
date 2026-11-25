@@ -6,6 +6,7 @@ import { CunAiGuideOverlay, type CunGuideStep } from '@/components/CunAiGuideOve
 import { CunAiSheet, type CunFlowId } from '@/components/CunAiSheet';
 import { LiveVoiceGuardModal } from '@/components/LiveVoiceGuardModal';
 import { MobileShell } from '@/components/MobileShell';
+import { QrCameraScannerModal } from '@/components/QrCameraScannerModal';
 import { runLayerOneRules } from '@/data/local-rules';
 import { INITIAL_RADAR_STATS } from '@/data/mock-radar';
 import { HomeScreen } from '@/features/m01-home/HomeScreen';
@@ -71,7 +72,6 @@ const CONTACT_STORAGE_KEY = 'lacd_family_contact_v1';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const MODE_ORDER: UiMode[] = ['minimal', 'standard', 'pro'];
 const MODE_TOAST: Record<UiMode, string> = {
   minimal: 'Chế độ Tối giản: Chữ lớn, 1 chạm, dễ thao tác cho mọi lứa tuổi.',
   standard: 'Chế độ Tiêu chuẩn: Cân bằng đầy đủ tính năng hàng ngày.',
@@ -98,6 +98,7 @@ export default function HomePage() {
   });
   const [cunOpen, setCunOpen] = useState(false);
   const [liveVoiceOpen, setLiveVoiceOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
   const [guideStep, setGuideStep] = useState<CunGuideStep | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const flowTokenRef = useRef(0);
@@ -165,12 +166,6 @@ export default function HomePage() {
       // Ignore
     }
     notify(MODE_TOAST[nextMode]);
-  }
-
-  function handleCycleUiMode() {
-    const idx = MODE_ORDER.indexOf(uiMode);
-    const next = MODE_ORDER[(idx + 1) % MODE_ORDER.length];
-    handleChangeUiMode(next);
   }
 
   function navigateTo(nextScreen: ScreenId) {
@@ -334,7 +329,10 @@ export default function HomePage() {
       currentUser={currentUser}
       toastMessage={toastMsg}
       onNavigate={navigateTo}
-      onCycleUiMode={handleCycleUiMode}
+      onOpenLiveVoice={() => {
+        stopGuide();
+        setLiveVoiceOpen(true);
+      }}
       onOpenMascot={() => {
         stopGuide();
         setCunOpen(true);
@@ -362,6 +360,10 @@ export default function HomePage() {
           onOpenLiveVoice={() => {
             stopGuide();
             setLiveVoiceOpen(true);
+          }}
+          onOpenQrScanner={() => {
+            stopGuide();
+            setQrOpen(true);
           }}
           onSpeakWithCun={() => void runAnimatedPoliceFamilyFlow()}
         />
@@ -416,6 +418,7 @@ export default function HomePage() {
             setVideoStartIdx(idx);
             navigateTo('M05');
           }}
+          onAnalyzeSample={(t) => void handleAnalyze(t)}
           onNotify={notify}
         />
       )}
@@ -482,6 +485,20 @@ export default function HomePage() {
             setScannedText(captured);
             setScanResult(runLayerOneRules(captured));
             navigateTo('M03');
+          }}
+        />
+      )}
+      {qrOpen && (
+        <QrCameraScannerModal
+          open={qrOpen}
+          onClose={() => setQrOpen(false)}
+          onScanDecoded={(parsed) => {
+            setQrOpen(false);
+            void handleAnalyze(parsed.scanSummary, true);
+          }}
+          onCaptureImageFallback={(b64, mime, lbl) => {
+            setQrOpen(false);
+            void handleAnalyzeImage(b64, mime, lbl);
           }}
         />
       )}

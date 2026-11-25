@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { runLayerOneRules } from '@/data/local-rules';
+import { callGeminiJson, hasGeminiKeyConfigured } from '@/lib/gemini-client';
 import { inspectAllUrlsInText } from '@/lib/url-inspector';
 import type { ScreenId } from '@/types';
 
@@ -55,8 +56,7 @@ export async function POST(request: Request) {
 
     const fallbackReply = buildSmartFallback(message, layerOne.speech, hasRisk);
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || body.offline) {
+    if (!hasGeminiKeyConfigured() || body.offline) {
       return NextResponse.json(fallbackReply);
     }
 
@@ -67,32 +67,18 @@ Trả về JSON: {"reply":"câu trả lời ngắn","suggestedScreen":"M02|M03|M
 
 Câu hỏi của người dân: "${message}"`;
 
-    const model = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.3 },
-        }),
-      }
-    );
+    const aiRes = await callGeminiJson<Partial<CunChatResponse>>({
+      parts: [{ text: prompt }],
+      temperature: 0.3,
+      timeoutMs: 8500,
+      cacheKey: `cun:${message.toLowerCase().slice(0, 160)}`,
+    });
 
-    if (!res.ok) {
+    if (!aiRes) {
       return NextResponse.json(fallbackReply);
     }
 
-    const payload = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const raw = payload.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!raw) {
-      return NextResponse.json(fallbackReply);
-    }
-
-    const parsed = JSON.parse(raw) as Partial<CunChatResponse>;
+    const parsed = aiRes.data;
     const validScreens = new Set(['M02', 'M03', 'M04', 'M07']);
     const screen = validScreens.has(parsed.suggestedScreen ?? '')
       ? parsed.suggestedScreen

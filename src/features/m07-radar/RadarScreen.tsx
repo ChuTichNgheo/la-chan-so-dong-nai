@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Copy,
   Download,
+  FileSpreadsheet,
   Loader2,
   QrCode,
   RefreshCw,
@@ -28,6 +29,7 @@ import type {
 import { AdminModerationPanel } from './AdminModerationPanel';
 import { DONG_NAI_AREAS, DongNaiHotspotGrid } from './DongNaiHotspotGrid';
 import { RadarLookupCard } from './RadarLookupCard';
+import { WeeklyTrendChart } from './WeeklyTrendChart';
 
 interface RadarScreenProps {
   wideRadar: boolean;
@@ -180,6 +182,52 @@ export function RadarScreen({
     }
   }
 
+  function handleExportCsv() {
+    const rows = [...filteredApproved, ...filteredQueue];
+    const escapeCell = (val: string) => `"${String(val).replace(/"/g, '""')}"`;
+    const header = ['Mã hồ sơ', 'Trạng thái', 'Loại thủ đoạn', 'Đối tượng (đã che)', 'Địa bàn', 'Mô tả', 'Thời gian'];
+    const dataLines =
+      rows.length > 0
+        ? rows.map((r) =>
+            [
+              r.id,
+              r.status === 'approved' ? 'Đã xác minh' : 'Chờ duyệt',
+              r.type,
+              r.targetMasked,
+              r.area,
+              r.description,
+              r.createdAt,
+            ]
+              .map(escapeCell)
+              .join(',')
+          )
+        : stats.breakdown.map((b, idx) =>
+            [
+              `TK-${idx + 1}`,
+              'Tổng hợp',
+              b.label,
+              `${b.count} vụ (${b.percent}%)`,
+              selectedArea || 'Đồng Nai',
+              'Số liệu thống kê Radar cộng đồng',
+              new Date().toISOString(),
+            ]
+              .map(escapeCell)
+              .join(',')
+          );
+
+    const csvContent = `\uFEFF${header.map(escapeCell).join(',')}\n${dataLines.join('\n')}`;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bao-cao-radar-dong-nai-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    onNotify('Đã xuất file báo cáo Excel (.csv) chuẩn UTF-8 cho Thành đoàn!');
+  }
+
   const areaObj = selectedArea ? DONG_NAI_AREAS.find((a) => a.name === selectedArea) : null;
   const filteredApproved = areaObj
     ? recentApproved.filter((r) =>
@@ -258,7 +306,7 @@ export function RadarScreen({
           </span>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <button
             type="button"
             onClick={() => {
@@ -309,6 +357,17 @@ export function RadarScreen({
               <Sparkles className="h-4 w-4 text-[#FCD34D]" aria-hidden="true" />
             )}
             <span>AI soạn tin Zalo</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            data-screen="M07"
+            data-ui="btn-export-csv"
+            className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-slate-100 p-2.5 text-center text-[11px] font-extrabold text-[#0F172A] transition hover:bg-slate-200"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-[#059669]" aria-hidden="true" />
+            <span>Xuất Excel (.csv)</span>
           </button>
         </div>
       </div>
@@ -378,6 +437,7 @@ export function RadarScreen({
 
       <div className={wideRadar ? 'grid grid-cols-2 items-start gap-3.5' : 'space-y-3.5'}>
         <div className="space-y-3.5">
+          <WeeklyTrendChart stats={stats} />
           <div className="rounded-3xl bg-white p-4 shadow-[0_6px_22px_rgba(13,104,94,0.06)]">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-extrabold text-[#0F172A]">Phân bố thủ đoạn</h2>

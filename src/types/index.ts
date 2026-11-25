@@ -65,6 +65,9 @@ export interface AnalyzeResult {
   extractedText?: string;
   urlReports?: UrlInspectionReport[];
   communityMatches?: number;
+  communitySummary?: string;
+  modelUsed?: string;
+  ragContextCount?: number;
   psychologyMetrics?: PsychologyMetrics;
   escapeScript?: string;
   source: 'hybrid' | 'db' | 'offline';

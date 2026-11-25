@@ -14,8 +14,8 @@ import {
   Mic,
   MicOff,
   PhoneCall,
+  QrCode,
   Radar,
-  Radio,
   ShieldCheck,
   Sparkles,
   Type,
@@ -62,6 +62,7 @@ interface HomeScreenProps {
   onAnalyzeImage: (base64: string, mimeType: string, label: string) => void;
   onNotify: (msg: string) => void;
   onOpenLiveVoice: () => void;
+  onOpenQrScanner: () => void;
   onSpeakWithCun: () => void;
 }
 
@@ -150,6 +151,7 @@ export function HomeScreen({
   onAnalyzeImage,
   onNotify,
   onOpenLiveVoice,
+  onOpenQrScanner,
   onSpeakWithCun,
 }: HomeScreenProps) {
   const [inputText, setInputText] = useState('');
@@ -210,6 +212,7 @@ export function HomeScreen({
           trustedPhone={trustedPhone}
           onNavigate={onNavigate}
           onOpenLiveVoice={onOpenLiveVoice}
+          onOpenQrScanner={onOpenQrScanner}
           onAnalyzeText={onAnalyze}
           onPickImage={() => fileRef.current?.click()}
           onChangeUiMode={onChangeUiMode}
@@ -239,6 +242,11 @@ export function HomeScreen({
 
   function handleVoiceInput() {
     if (typeof window === 'undefined') return;
+    const isMobile = /Android|iPhone|iPad|iPod|Zalo|FBAN|FBAV/i.test(navigator.userAgent || '');
+    if (isMobile) {
+      onOpenLiveVoice();
+      return;
+    }
 
     if (listening) {
       try {
@@ -352,13 +360,13 @@ export function HomeScreen({
           </span>
           <button
             type="button"
-            onClick={onOpenLiveVoice}
+            onClick={onOpenQrScanner}
             data-screen="M01"
-            data-ui="btn-hero-live-voice"
+            data-ui="btn-hero-scan-qr"
             className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-[#FCD34D] bg-[#F59E0B] px-2.5 py-1 text-[10.5px] font-extrabold text-[#0F172A] shadow-sm transition hover:bg-[#FBBF24]"
           >
-            <Radio className="h-3 w-3 animate-pulse" aria-hidden="true" />
-            Nghe cuộc gọi Live
+            <QrCode className="h-3.5 w-3.5" aria-hidden="true" />
+            Quét QR chuyển tiền
           </button>
         </div>
 
@@ -383,7 +391,7 @@ export function HomeScreen({
           </div>
         </div>
 
-        {/* Spotlight Command Pill */}
+        {/* Spotlight Command Pill — crisp single-line on 390px */}
         <div className="relative z-10 mt-3 flex items-center gap-1 rounded-2xl bg-white/97 p-1.5 pl-3 text-[#0F172A] shadow-[0_8px_22px_rgba(4,38,34,0.26)]">
           <textarea
             ref={textareaRef}
@@ -393,8 +401,8 @@ export function HomeScreen({
               adjustTextareaHeight(e.target);
             }}
             rows={1}
-            placeholder="Dán tin, SĐT, link, STK..."
-            className="min-h-[38px] flex-1 resize-none overflow-hidden bg-transparent py-2 text-[13px] font-medium leading-5 text-[#0F172A] outline-none placeholder:text-[#64748B]"
+            placeholder="Dán tin, SĐT, link..."
+            className="h-[38px] min-h-[38px] flex-1 resize-none overflow-hidden bg-transparent py-2 text-[13px] font-medium leading-[22px] text-[#0F172A] outline-none placeholder:truncate placeholder:text-[#64748B]"
           />
           {inputText && (
             <button
@@ -458,8 +466,8 @@ export function HomeScreen({
           </button>
         </div>
 
-        {/* Sample Chips */}
-        <div className="relative z-10 mt-2.5 flex flex-wrap gap-1.5">
+        {/* Sample Chips — clean 1-row 4-column layout with zero orphan wrap on 390px */}
+        <div className="relative z-10 mt-2.5 grid grid-cols-4 gap-1.5">
           {QUICK_SAMPLES.map((sample) => (
             <button
               key={sample.id}
@@ -470,7 +478,7 @@ export function HomeScreen({
               }}
               data-screen="M01"
               data-ui={`chip-sample-${sample.id}`}
-              className="rounded-full border border-white/20 bg-white/15 px-3 py-1 text-[11px] font-bold text-white backdrop-blur transition hover:bg-white/25"
+              className="truncate rounded-full border border-white/20 bg-white/15 px-2 py-1 text-center text-[10.5px] font-bold text-white backdrop-blur transition hover:bg-white/25"
             >
               {sample.label}
             </button>

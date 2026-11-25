@@ -3,22 +3,20 @@
 import type { ReactNode } from 'react';
 import {
   BarChart3,
-  Cpu,
   Gamepad2,
   Home,
   Info,
+  Radio,
   Search,
   Settings,
   ShieldCheck,
-  Sparkles,
-  Type,
   Video,
   WifiOff,
 } from 'lucide-react';
 import { BOTTOM_NAV_TABS, SCREEN_TAB_MAP } from '@/config/navigation';
 import type { AppUserProfile, ScreenId, UiMode } from '@/types';
 import { BrandLogo } from './BrandLogo';
-import { CunAiMascot } from './CunAiMascot';
+import { CunAiSvg } from './CunAiMascot';
 
 interface MobileShellProps {
   activeScreen: ScreenId;
@@ -28,7 +26,7 @@ interface MobileShellProps {
   currentUser: AppUserProfile | null;
   toastMessage: string | null;
   onNavigate: (screen: ScreenId) => void;
-  onCycleUiMode: () => void;
+  onOpenLiveVoice: () => void;
   onOpenMascot: () => void;
   children: ReactNode;
 }
@@ -41,27 +39,6 @@ const TAB_ICONS = {
   video: Video,
 } as const;
 
-const MODE_BADGE: Record<
-  UiMode,
-  { label: string; className: string; icon: 'minimal' | 'standard' | 'pro' }
-> = {
-  minimal: {
-    label: 'Tối giản',
-    className: 'bg-[#0D685E] text-white shadow-sm',
-    icon: 'minimal',
-  },
-  standard: {
-    label: 'Tiêu chuẩn',
-    className: 'bg-[#E9FAF5] text-[#0D685E]',
-    icon: 'standard',
-  },
-  pro: {
-    label: 'Chuyên sâu',
-    className: 'bg-[#0F172A] text-[#34D399] shadow-sm',
-    icon: 'pro',
-  },
-};
-
 export function MobileShell({
   activeScreen,
   offlineMode,
@@ -70,13 +47,12 @@ export function MobileShell({
   currentUser,
   toastMessage,
   onNavigate,
-  onCycleUiMode,
+  onOpenLiveVoice,
   onOpenMascot,
   children,
 }: MobileShellProps) {
   const activeTab = SCREEN_TAB_MAP[activeScreen];
   const isVideoScreen = activeScreen === 'M05';
-  const modeMeta = MODE_BADGE[uiMode];
 
   const containerWidth = isVideoScreen
     ? 'max-w-[430px]'
@@ -92,34 +68,42 @@ export function MobileShell({
         } ${containerWidth} ${uiMode === 'minimal' ? 'minimal-mode' : ''}`}
       >
         {!isVideoScreen && (
-          <header className="z-20 flex shrink-0 items-center justify-between gap-1.5 bg-white/95 px-3 py-2.5 backdrop-blur-md shadow-[0_1px_12px_rgba(13,104,94,0.05)] sm:px-4">
+          <header className="z-20 flex shrink-0 items-center justify-between gap-1.5 bg-white/95 px-3 py-2 backdrop-blur-md shadow-[0_1px_12px_rgba(13,104,94,0.05)] sm:px-4">
             <BrandLogo />
             <div className="flex shrink-0 items-center gap-1.5">
               <button
                 type="button"
-                onClick={onCycleUiMode}
+                onClick={onOpenLiveVoice}
                 data-screen={activeScreen}
-                data-ui="btn-cycle-ui-mode"
-                title="Đổi nhanh chế độ giao diện: Tối giản → Tiêu chuẩn → Chuyên sâu"
-                className={`inline-flex min-h-[34px] whitespace-nowrap items-center gap-1 rounded-full px-2.5 text-[11px] font-bold transition sm:min-h-[36px] sm:px-3 sm:text-xs ${modeMeta.className}`}
+                data-ui="btn-header-live-voice"
+                title="Mở Lá Chắn Nghe Trực Tiếp từ mọi màn hình"
+                className="inline-flex min-h-[34px] shrink-0 whitespace-nowrap items-center gap-1 rounded-full bg-[#FEF3C7] px-2.5 text-[11px] font-extrabold text-[#92400E] transition hover:bg-[#FDE68A]"
               >
-                {modeMeta.icon === 'minimal' ? (
-                  <Type className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                ) : modeMeta.icon === 'pro' ? (
-                  <Cpu className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                )}
-                <span>{modeMeta.label}</span>
+                <Radio className="h-3.5 w-3.5 text-[#D97706]" aria-hidden="true" />
+                <span>Nghe Live</span>
               </button>
+
+              <button
+                type="button"
+                onClick={onOpenMascot}
+                data-screen={activeScreen}
+                data-ui="btn-cun-ai-mascot"
+                aria-label="Mở Trợ lý Cún INFINITY AI"
+                className="inline-flex min-h-[34px] shrink-0 whitespace-nowrap items-center gap-1 rounded-full bg-[#0D685E] px-2 text-[11px] font-extrabold text-white shadow-xs transition hover:bg-[#09524A]"
+              >
+                <CunAiSvg size={22} />
+                <span className="pr-0.5">Cún</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => onNavigate('M09')}
                 data-screen={activeScreen}
                 data-ui="btn-header-account"
-                className={`inline-flex min-h-[34px] whitespace-nowrap items-center gap-1 rounded-full px-2.5 text-[11px] font-bold transition sm:min-h-[36px] sm:px-3 sm:text-xs ${
+                aria-label="Cài đặt và tài khoản"
+                className={`inline-flex min-h-[34px] shrink-0 whitespace-nowrap items-center gap-1 rounded-full px-2.5 text-[11px] font-bold transition ${
                   activeScreen === 'M09'
-                    ? 'bg-[#0D685E] text-white'
+                    ? 'bg-[#0F172A] text-white'
                     : currentUser?.role === 'admin'
                     ? 'bg-[#FEF3C7] text-[#92400E]'
                     : 'bg-slate-100 text-[#0F172A]'
@@ -130,7 +114,7 @@ export function MobileShell({
                 ) : (
                   <Settings className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 )}
-                <span className="max-w-[78px] truncate">
+                <span className="hidden max-w-[70px] truncate sm:inline">
                   {currentUser
                     ? currentUser.role === 'admin'
                       ? 'Quản trị'
@@ -149,10 +133,11 @@ export function MobileShell({
           </div>
         )}
 
+        {/* Toast positioned cleanly ABOVE bottom navigation bar so it never blocks headers/tabs */}
         {toastMessage && (
           <div
             role="status"
-            className="pointer-events-none absolute inset-x-3 top-14 z-40 flex items-center gap-2 rounded-2xl bg-[#0F172A]/95 px-3.5 py-2.5 text-xs font-semibold text-white shadow-lg backdrop-blur"
+            className="pointer-events-none absolute inset-x-3 bottom-[74px] z-40 flex items-center gap-2 rounded-2xl bg-[#0F172A]/95 px-3.5 py-2.5 text-xs font-semibold text-white shadow-lg backdrop-blur"
           >
             <Info className="h-4 w-4 shrink-0 text-[#FCD34D]" aria-hidden="true" />
             <span>{toastMessage}</span>
@@ -164,17 +149,13 @@ export function MobileShell({
           className={
             isVideoScreen
               ? 'relative flex-1 overflow-hidden p-0'
-              : 'flex-1 overflow-y-auto px-4 pt-3.5 pb-28'
+              : 'flex-1 overflow-y-auto px-4 pt-3.5 pb-10'
           }
         >
           <div key={activeScreen} className={isVideoScreen ? 'h-full w-full' : 'animate-screen-enter'}>
             {children}
           </div>
         </main>
-
-        {!isVideoScreen && (
-          <CunAiMascot onClick={onOpenMascot} screenId={activeScreen} />
-        )}
 
         <nav
           aria-label="Điều hướng chính"
@@ -197,7 +178,7 @@ export function MobileShell({
                 className={`flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-2xl px-1 text-[11px] font-bold transition active:scale-95 ${
                   isVideoScreen
                     ? isActive
-                      ? 'text-[#34D399]'
+                      ? 'bg-white/15 text-[#34D399]'
                       : 'text-white/65 hover:text-white'
                     : isActive
                     ? 'bg-[#E9FAF5] text-[#0D685E]'

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  Loader2,
   Mic,
   MicOff,
   PhoneCall,
@@ -87,6 +88,34 @@ function detectTriggers(text: string): string[] {
   return LIVE_DANGER_TRIGGERS.filter((kw) => lower.includes(kw));
 }
 
+function isMobileOrWebView(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  return /Android|iPhone|iPad|iPod|Zalo|FBAN|FBAV|Line|MicroMessenger/i.test(ua);
+}
+
+function pickSupportedAudioMime(): string {
+  if (typeof MediaRecorder === 'undefined') return 'audio/webm';
+  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+  for (const mime of candidates) {
+    if (MediaRecorder.isTypeSupported(mime)) return mime;
+  }
+  return '';
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      const commaIdx = result.indexOf(',');
+      resolve(commaIdx >= 0 ? result.slice(commaIdx + 1) : result);
+    };
+    reader.onerror = () => reject(new Error('Failed to read audio blob'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 export function LiveVoiceGuardModal({
   open,
   trustedName,
@@ -95,16 +124,28 @@ export function LiveVoiceGuardModal({
   onAskFamily,
 }: LiveVoiceGuardModalProps) {
   const [listening, setListening] = useState(false);
+  const [recordingMode, setRecordingMode] = useState<'speech' | 'recorder' | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [hits, setHits] = useState<string[]>([]);
-  const [statusNote, setStatusNote] = useState('Bấm Micro để nói hoặc bật loa ngoài cuộc gọi lạ cho Cún nghe.');
+  const [statusNote, setStatusNote] = useState(
+    'Bấm nút Micro để nói hoặc bật loa ngoài cuộc gọi lạ cho Cún nghe.'
+  );
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const simTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const alertedRef = useRef(false);
 
   const shortContact = trustedName.split('(')[0].trim() || 'Người thân';
+
+  const stopMediaStream = useCallback(() => {
+    mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+    mediaStreamRef.current = null;
+  }, []);
 
   const stopAll = useCallback(() => {
     if (simTimerRef.current) {
@@ -118,8 +159,18 @@ export function LiveVoiceGuardModal({
       // Ignore stop errors
     }
     recognitionRef.current = null;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {
+        // Ignore stop errors
+      }
+    }
+    mediaRecorderRef.current = null;
+    stopMediaStream();
     setListening(false);
-  }, []);
+    setRecordingMode(null);
+  }, [stopMediaStream]);
 
   const triggerEmergencyAlert = useCallback((foundHits: string[]) => {
     if (alertedRef.current || foundHits.length === 0) return;
@@ -145,7 +196,102 @@ export function LiveVoiceGuardModal({
     [triggerEmergencyAlert]
   );
 
-  const startLiveMic = useCallback(() => {
+  const startUniversalAudioRecorder = useCallback(async () => {
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices ||
+      typeof navigator.mediaDevices.getUserMedia !== 'function' ||
+      typeof MediaRecorder === 'undefined'
+    ) {
+      setStatusNote(
+        'Trình duyệt trong app (Zalo/Messenger) đang khóa Micro. Hãy mở bằng Chrome/Safari hoặc dùng 2 nút Thử mẫu bên dưới!'
+      );
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      const mimeType = pickSupportedAudioMime();
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      audioChunksRef.current = [];
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (evt) => {
+        if (evt.data && evt.data.size > 0) {
+          audioChunksRef.current.push(evt.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const chunks = audioChunksRef.current;
+        audioChunksRef.current = [];
+        stopMediaStream();
+        setListening(false);
+        setRecordingMode(null);
+
+        if (chunks.length === 0) return;
+        const actualMime = recorder.mimeType || mimeType || 'audio/webm';
+        const blob = new Blob(chunks, { type: actualMime });
+        if (blob.size < 800) {
+          setStatusNote('Đoạn ghi âm quá ngắn — hãy bấm Micro, nói rõ trong 2–5 giây rồi bấm Dừng nhé.');
+          return;
+        }
+
+        setTranscribing(true);
+        setStatusNote('Gemini AI đang chép lời tiếng Việt và kiểm tra từ khóa lừa đảo...');
+        try {
+          const base64 = await blobToBase64(blob);
+          const cleanMime = actualMime.split(';')[0] || 'audio/webm';
+          const res = await fetch('/api/transcribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audioBase64: base64, mimeType: cleanMime }),
+          });
+          const data = (await res.json()) as { transcript?: string; error?: string };
+          if (!res.ok || !data.transcript) {
+            setStatusNote(
+              data.error || 'Chưa nghe rõ lời nói — hãy nói gần Micro hơn hoặc thử 2 nút mẫu bên dưới.'
+            );
+            return;
+          }
+          evaluateText(data.transcript);
+          setStatusNote('Đã nghe xong! Bạn có thể bấm Phân tích sâu AI hoặc Hỏi người thân ngay.');
+        } catch {
+          setStatusNote('Không gửi được đoạn ghi âm lúc này — hãy thử lại hoặc dùng nút mẫu.');
+        } finally {
+          setTranscribing(false);
+        }
+      };
+
+      recorder.start();
+      setListening(true);
+      setRecordingMode('recorder');
+      setStatusNote('Đang ghi âm trên điện thoại... Nói xong hãy bấm lại nút ĐỎ để Cún phân tích ngay!');
+    } catch {
+      stopMediaStream();
+      setListening(false);
+      setRecordingMode(null);
+      setStatusNote(
+        'Điện thoại chưa cấp quyền Micro (hoặc bạn đang mở trong Zalo). Hãy cấp quyền Micro trong Safari/Chrome hoặc bấm 2 nút Thử mẫu!'
+      );
+    }
+  }, [evaluateText, stopMediaStream]);
+
+  const handleToggleMic = useCallback(() => {
+    if (listening) {
+      if (recordingMode === 'recorder' && mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop();
+        return;
+      }
+      stopAll();
+      setStatusNote('Đã dừng lắng nghe.');
+      return;
+    }
+
     if (typeof window === 'undefined') return;
     stopAll();
     stopVietnameseSpeech();
@@ -153,16 +299,15 @@ export function LiveVoiceGuardModal({
     setTranscript('');
     setHits([]);
 
+    // On mobile phones (iPhone/Android/Zalo), Universal MediaRecorder + Gemini Audio is 10x more reliable than Web SpeechRecognition
     const win = window as unknown as {
       SpeechRecognition?: SpeechRecognitionCtor;
       webkitSpeechRecognition?: SpeechRecognitionCtor;
     };
     const Recognition = win.SpeechRecognition ?? win.webkitSpeechRecognition;
 
-    if (!Recognition) {
-      setStatusNote(
-        'Trình duyệt này chưa hỗ trợ Micro trực tiếp — bạn hãy bấm 1 nút "Thử cuộc gọi mẫu" bên dưới để xem Cún bắt bài Live!'
-      );
+    if (isMobileOrWebView() || !Recognition) {
+      void startUniversalAudioRecorder();
       return;
     }
 
@@ -185,33 +330,31 @@ export function LiveVoiceGuardModal({
             interim = `${interim} ${piece}`.trim();
           }
         }
-        const combined = `${committedText} ${interim}`.trim();
-        evaluateText(combined);
+        evaluateText(`${committedText} ${interim}`.trim());
       };
 
-      recognition.onerror = (evt) => {
-        setListening(false);
+      recognition.onerror = () => {
         recognitionRef.current = null;
-        if (evt.error === 'not-allowed') {
-          setStatusNote('Bạn chưa cấp quyền Micro cho trình duyệt. Hãy bật quyền hoặc dùng nút Thử mẫu bên dưới.');
-        } else {
-          setStatusNote('Micro tạm dừng. Bấm lại Micro để nghe tiếp hoặc chọn Thử cuộc gọi mẫu.');
-        }
+        setListening(false);
+        setRecordingMode(null);
+        // Seamless fallback to universal MediaRecorder
+        void startUniversalAudioRecorder();
       };
 
       recognition.onend = () => {
         setListening(false);
+        setRecordingMode(null);
         recognitionRef.current = null;
       };
 
       recognition.start();
       setListening(true);
+      setRecordingMode('speech');
       setStatusNote('Đang lắng nghe tiếng Việt trực tiếp... Cún sẽ báo động ngay khi có từ khóa lừa đảo!');
     } catch {
-      setListening(false);
-      setStatusNote('Không thể khởi động Micro. Hãy thử lại hoặc dùng nút Thử cuộc gọi mẫu.');
+      void startUniversalAudioRecorder();
     }
-  }, [evaluateText, stopAll]);
+  }, [evaluateText, listening, recordingMode, startUniversalAudioRecorder, stopAll]);
 
   function startDemoStream(scriptText: string) {
     stopAll();
@@ -246,12 +389,19 @@ export function LiveVoiceGuardModal({
       try {
         recognitionRef.current?.stop();
       } catch {
-        // Ignore stop errors
+        // Ignore
       }
-      recognitionRef.current = null;
+      try {
+        if (mediaRecorderRef.current?.state === 'recording') {
+          mediaRecorderRef.current.stop();
+        }
+      } catch {
+        // Ignore
+      }
+      stopMediaStream();
       stopVietnameseSpeech();
     };
-  }, []);
+  }, [stopMediaStream]);
 
   if (!open) return null;
 
@@ -269,30 +419,30 @@ export function LiveVoiceGuardModal({
           isDanger ? 'border-[#DC2626]' : 'border-[#0D685E]'
         }`}
       >
-        {/* Top Banner */}
+        {/* Top Banner — fixed shrink-0 on close button so it stays perfectly circular */}
         <div
-          className={`flex items-center justify-between gap-2 px-4 py-3.5 text-white transition-colors ${
+          className={`flex items-center justify-between gap-2.5 px-4 py-3.5 text-white transition-colors ${
             isDanger
               ? 'bg-gradient-to-r from-[#991B1B] to-[#DC2626]'
               : 'bg-gradient-to-r from-[#07463F] to-[#0D685E]'
           }`}
         >
-          <div className="flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-2xl bg-white/15">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-white/15">
               {isDanger ? (
                 <ShieldAlert className="h-5 w-5 animate-bounce" aria-hidden="true" />
               ) : (
                 <Radio className={`h-5 w-5 ${listening || simulating ? 'animate-pulse' : ''}`} aria-hidden="true" />
               )}
             </span>
-            <div>
-              <div className="font-[family-name:var(--font-lexend)] text-sm font-extrabold">
+            <div className="min-w-0">
+              <div className="truncate font-[family-name:var(--font-lexend)] text-sm font-extrabold">
                 {isDanger ? 'BÁO ĐỘNG: PHÁT HIỆN LỪA ĐẢO!' : 'Lá Chắn Nghe Trực Tiếp'}
               </div>
-              <div className="text-[11px] text-white/85">
+              <div className="text-[11px] leading-snug text-white/85">
                 {isDanger
                   ? 'Cúp máy ngay • Không chuyển tiền • Không đọc OTP'
-                  : 'Bật loa ngoài cuộc gọi lạ hoặc kể lại cho Cún nghe'}
+                  : 'Hỗ trợ Micro iPhone, Android & Máy tính'}
               </div>
             </div>
           </div>
@@ -304,7 +454,7 @@ export function LiveVoiceGuardModal({
               onClose();
             }}
             aria-label="Đóng lá chắn nghe trực tiếp"
-            className="grid h-9 w-9 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -315,7 +465,8 @@ export function LiveVoiceGuardModal({
           <div className="flex flex-col items-center gap-2.5 rounded-2xl bg-[#F4FBF8] p-4 text-center">
             <button
               type="button"
-              onClick={() => (listening ? stopAll() : startLiveMic())}
+              disabled={transcribing}
+              onClick={handleToggleMic}
               data-ui="btn-live-mic-toggle"
               className={`relative grid h-20 w-20 place-items-center rounded-full text-white shadow-lg transition active:scale-95 ${
                 listening
@@ -325,7 +476,9 @@ export function LiveVoiceGuardModal({
                   : 'bg-[#0D685E] hover:bg-[#09524A]'
               }`}
             >
-              {listening ? (
+              {transcribing ? (
+                <Loader2 className="h-8 w-8 animate-spin" aria-hidden="true" />
+              ) : listening ? (
                 <MicOff className="h-8 w-8" aria-hidden="true" />
               ) : (
                 <Mic className="h-8 w-8" aria-hidden="true" />
@@ -366,7 +519,7 @@ export function LiveVoiceGuardModal({
               <p className="font-medium break-words">{transcript}</p>
             ) : (
               <p className="italic text-[#94A3B8]">
-                Chưa có âm thanh... Hãy bấm Micro phía trên và nói thử (VD: &ldquo;Alo công an yêu cầu chuyển tiền xác minh&rdquo;).
+                Chưa có âm thanh... Bấm nút Micro phía trên để nói hoặc bật loa ngoài cuộc gọi lạ.
               </p>
             )}
             {hits.length > 0 && (

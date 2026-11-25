@@ -5,6 +5,7 @@ import {
   Camera,
   ClipboardPaste,
   PhoneCall,
+  QrCode,
   Radio,
   Search,
   SlidersHorizontal,
@@ -18,6 +19,7 @@ interface ElderlyModeProps {
   trustedPhone: string;
   onNavigate: (screen: ScreenId) => void;
   onOpenLiveVoice: () => void;
+  onOpenQrScanner: () => void;
   onAnalyzeText: (text: string) => void;
   onPickImage: () => void;
   onChangeUiMode: (mode: UiMode) => void;
@@ -33,6 +35,7 @@ export function ElderlyMode({
   trustedPhone,
   onNavigate,
   onOpenLiveVoice,
+  onOpenQrScanner,
   onAnalyzeText,
   onPickImage,
   onChangeUiMode,
@@ -108,17 +111,28 @@ export function ElderlyMode({
         </div>
       </button>
 
-      {/* Simple 3-way secondary grid */}
-      <div className="grid grid-cols-3 gap-2.5">
+      {/* Simple 4-way secondary grid */}
+      <div className="grid grid-cols-2 gap-2.5">
+        <button
+          type="button"
+          onClick={onOpenQrScanner}
+          data-screen="M01b"
+          data-ui="btn-minimal-scan-qr"
+          className="flex min-h-[78px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-[#0D685E] bg-white p-2.5 text-sm font-extrabold text-[#0D685E]"
+        >
+          <QrCode className="h-6 w-6" aria-hidden="true" />
+          <span>Quét mã QR</span>
+        </button>
+
         <button
           type="button"
           onClick={() => setShowPaste((prev) => !prev)}
           data-screen="M01b"
           data-ui="btn-toggle-paste-senior"
-          className="flex min-h-[82px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-[#0D685E] bg-white p-2.5 text-sm font-extrabold text-[#0D685E]"
+          className="flex min-h-[78px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-[#0D685E] bg-white p-2.5 text-sm font-extrabold text-[#0D685E]"
         >
           <ClipboardPaste className="h-6 w-6" aria-hidden="true" />
-          <span>Dán tin</span>
+          <span>Dán tin nhắn</span>
         </button>
 
         <button
@@ -126,10 +140,10 @@ export function ElderlyMode({
           onClick={onPickImage}
           data-screen="M01b"
           data-ui="btn-minimal-scan-image"
-          className="flex min-h-[82px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-[#0D685E] bg-white p-2.5 text-sm font-extrabold text-[#0D685E]"
+          className="flex min-h-[78px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-[#0D685E] bg-white p-2.5 text-sm font-extrabold text-[#0D685E]"
         >
           <Camera className="h-6 w-6" aria-hidden="true" />
-          <span>Quét ảnh</span>
+          <span>Chọn ảnh</span>
         </button>
 
         <button
@@ -137,7 +151,7 @@ export function ElderlyMode({
           onClick={() => onNavigate('M05')}
           data-screen="M01b"
           data-ui="btn-xem-video"
-          className="flex min-h-[82px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-[#0D685E] bg-white p-2.5 text-sm font-extrabold text-[#0D685E]"
+          className="flex min-h-[78px] flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-[#0D685E] bg-white p-2.5 text-sm font-extrabold text-[#0D685E]"
         >
           <Video className="h-6 w-6" aria-hidden="true" />
           <span>Xem Video</span>

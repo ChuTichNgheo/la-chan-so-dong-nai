@@ -16,7 +16,8 @@ interface VideosScreenProps {
 export function VideosScreen({ initialIndex = 0, onNavigate, onNotify }: VideosScreenProps) {
   const [filter, setFilter] = useState<'all' | 'senior' | 'student'>('all');
   const [activeIndex, setActiveIndex] = useState(initialIndex);
-  const [muted, setMuted] = useState(true);
+  // Start with sound ON by default (navigating to Video tab counts as a user gesture on mobile)
+  const [muted, setMuted] = useState(false);
   const [largeCaption, setLargeCaption] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const feedRef = useRef<HTMLDivElement | null>(null);
@@ -98,7 +99,7 @@ export function VideosScreen({ initialIndex = 0, onNavigate, onNotify }: VideosS
           {(
             [
               { id: 'all', label: `Tất cả (${VIDEOS_DATA.length})` },
-              { id: 'senior', label: '65+' },
+              { id: 'senior', label: 'Gia đình' },
               { id: 'student', label: 'THPT' },
             ] as const
           ).map((pill) => (
@@ -157,6 +158,7 @@ export function VideosScreen({ initialIndex = 0, onNavigate, onNotify }: VideosS
               isFirst={idx === 0}
               muted={muted}
               largeCaption={largeCaption}
+              onAutoMuted={() => setMuted(true)}
               onToggleMute={handleToggleMute}
               onToggleCaption={() => setLargeCaption((p) => !p)}
               onOpenDetails={() => setShowDetails(true)}

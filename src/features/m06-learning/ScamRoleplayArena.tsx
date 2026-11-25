@@ -103,6 +103,7 @@ export function ScamRoleplayArena({
 }: ScamRoleplayArenaProps) {
   const [selectedId, setSelectedId] = useState<ScenarioId | null>(null);
   const [messages, setMessages] = useState<ChatTurn[]>([]);
+  const [suggestedReplies, setSuggestedReplies] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
   const [evaluation, setEvaluation] = useState<RoleplayEvaluation | null>(null);
@@ -117,6 +118,7 @@ export function ScamRoleplayArena({
     if (!found) return;
     setSelectedId(id);
     setMessages([{ role: 'scammer', text: found.opening }]);
+    setSuggestedReplies(found.quickReplies);
     setDraft('');
     setEvaluation(null);
     setBadgePreview(null);
@@ -148,6 +150,7 @@ export function ScamRoleplayArena({
       const data = (await res.json()) as {
         finished: boolean;
         scammerReply: string;
+        suggestedReplies?: string[];
         evaluation?: RoleplayEvaluation;
       };
 
@@ -156,6 +159,9 @@ export function ScamRoleplayArena({
         { role: 'scammer', text: data.scammerReply },
       ];
       setMessages(updatedMessages);
+      if (Array.isArray(data.suggestedReplies) && data.suggestedReplies.length > 0) {
+        setSuggestedReplies(data.suggestedReplies);
+      }
 
       if (data.finished && data.evaluation) {
         setEvaluation(data.evaluation);
@@ -321,7 +327,7 @@ export function ScamRoleplayArena({
         {!evaluation && (
           <div className="space-y-2 border-t border-slate-100 bg-white p-3">
             <div className="flex flex-wrap gap-1.5">
-              {activeScenario.quickReplies.map((qr, i) => (
+              {(suggestedReplies.length > 0 ? suggestedReplies : activeScenario.quickReplies).map((qr, i) => (
                 <button
                   key={i}
                   type="button"

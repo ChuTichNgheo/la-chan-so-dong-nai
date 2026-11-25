@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { callGemini, hasGeminiKeyConfigured } from '@/lib/gemini-client';
 import type { RadarStats, ScamReport } from '@/types';
 
 interface BulletinRequest {
@@ -29,8 +30,7 @@ export async function POST(request: Request) {
     const area = body.area?.trim() || 'Toàn tỉnh Đồng Nai';
     const fallback = buildFallbackBulletin(area, body.stats);
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    if (!hasGeminiKeyConfigured()) {
       return NextResponse.json({ bulletin: fallback, source: 'template' });
     }
 
@@ -48,36 +48,19 @@ ${recentText ? `- Các vụ việc mới xác minh:\n${recentText}` : ''}
 
 Yêu cầu: Văn phong gần gũi, dễ hiểu cho cả người lớn tuổi lẫn học sinh, nhắc 3 nguyên tắc vàng (không chuyển tiền cho người tự xưng công an, không bấm link/cài apk, gặp nghi vấn bấm Hỏi người thân). Chỉ trả về nội dung tin nhắn thuần túy (không bọc markdown code block).`;
 
-    const model = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.45 },
-        }),
-        signal: controller.signal,
-      }
-    );
-    clearTimeout(timer);
+    const aiRes = await callGemini({
+      parts: [{ text: prompt }],
+      temperature: 0.45,
+      timeoutMs: 9000,
+      cacheKey: `zalo:${area}:${body.stats?.totalReports ?? 120}`,
+      cacheTtlMs: 5 * 60 * 1000,
+    });
 
-    if (!res.ok) {
+    if (!aiRes?.text) {
       return NextResponse.json({ bulletin: fallback, source: 'template' });
     }
 
-    const payload = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const text = payload.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (!text) {
-      return NextResponse.json({ bulletin: fallback, source: 'template' });
-    }
-
-    return NextResponse.json({ bulletin: text, source: 'gemini' });
+    return NextResponse.json({ bulletin: aiRes.text, source: 'gemini', model: aiRes.model });
   } catch {
     return NextResponse.json({
       bulletin: buildFallbackBulletin('Đồng Nai'),

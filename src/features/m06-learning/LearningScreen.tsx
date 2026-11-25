@@ -3,20 +3,25 @@
 import { useEffect, useState } from 'react';
 import {
   Award,
+  ChevronDown,
+  ChevronUp,
   Clock,
   Download,
   MessageCircleWarning,
   Play,
   RotateCcw,
+  Search,
   Share2,
   Shield,
   Sparkles,
   UserRoundX,
   Video,
+  Volume2,
 } from 'lucide-react';
 import { CunAiSvg } from '@/components/CunAiMascot';
 import { GAME_QUESTIONS } from '@/data/lessons-game';
 import { LESSONS_DATA, VIDEOS_DATA } from '@/data/videos-data';
+import { speakAlertVietnamese } from '@/lib/speech';
 import { renderGameBadgeCardDataUrl } from '@/lib/zalo-card-canvas';
 import type { AppUserProfile } from '@/types';
 import { ScamRoleplayArena } from './ScamRoleplayArena';
@@ -25,6 +30,7 @@ interface LearningScreenProps {
   currentUser: AppUserProfile | null;
   onUserUpdated: (user: AppUserProfile) => void;
   onOpenVideoAt: (index: number) => void;
+  onAnalyzeSample: (text: string) => void;
   onNotify: (msg: string) => void;
 }
 
@@ -32,9 +38,11 @@ export function LearningScreen({
   currentUser,
   onUserUpdated,
   onOpenVideoAt,
+  onAnalyzeSample,
   onNotify,
 }: LearningScreenProps) {
   const [tab, setTab] = useState<'roleplay' | 'game' | 'lessons'>('roleplay');
+  const [expandedLessonId, setExpandedLessonId] = useState<number | null>(3);
   const [started, setStarted] = useState(false);
   const [qIndex, setQIndex] = useState(0);
   const [score, setScore] = useState(0);
@@ -432,29 +440,88 @@ export function LearningScreen({
             const realVideoIdx = item.src
               ? VIDEOS_DATA.findIndex((v) => v.id === item.id)
               : -1;
+            const isOpen = expandedLessonId === item.id;
             return (
-              <div key={item.id} className="rounded-3xl bg-white p-4 text-xs shadow-[0_4px_18px_rgba(13,104,94,0.05)]">
+              <div
+                key={item.id}
+                className="rounded-3xl bg-white p-4 text-xs shadow-[0_4px_18px_rgba(13,104,94,0.05)]"
+              >
                 <div className="flex items-center justify-between gap-2">
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold ${
-                      realVideoIdx >= 0 ? 'bg-[#FEF2F2] text-[#991B1B]' : 'bg-[#E9FAF5] text-[#0D685E]'
-                    }`}
-                  >
-                    {realVideoIdx >= 0 ? 'VIDEO THẬT' : 'Bài học 1p'}
-                  </span>
-                  {realVideoIdx >= 0 && (
-                    <button
-                      type="button"
-                      onClick={() => onOpenVideoAt(realVideoIdx)}
-                      className="inline-flex items-center gap-1 rounded-full bg-[#F4FBF8] px-3 py-1 text-[11px] font-bold text-[#0D685E]"
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold ${
+                        realVideoIdx >= 0
+                          ? 'bg-[#FEF2F2] text-[#991B1B]'
+                          : 'bg-[#E9FAF5] text-[#0D685E]'
+                      }`}
                     >
-                      <Video className="h-3 w-3" aria-hidden="true" />
-                      Xem ngay
-                    </button>
-                  )}
+                      {realVideoIdx >= 0 ? 'VIDEO THẬT' : 'Bài học 1 phút'}
+                    </span>
+                    <span className="text-[10.5px] font-semibold text-[#64748B]">
+                      {item.trend}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedLessonId(isOpen ? null : item.id)}
+                    className="inline-flex items-center gap-1 rounded-full bg-[#F4FBF8] px-2.5 py-1 text-[11px] font-bold text-[#0D685E]"
+                  >
+                    {isOpen ? 'Thu gọn' : 'Xem 3 bước'}
+                    {isOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </button>
                 </div>
-                <h2 className="mt-2 font-extrabold text-[#0F172A]">{item.title}</h2>
+
+                <h2 className="mt-2 font-[family-name:var(--font-lexend)] text-[13px] font-extrabold text-[#0F172A]">
+                  {item.title}
+                </h2>
                 <p className="mt-1 text-[#475569]">{item.stepAction}</p>
+
+                {isOpen && (
+                  <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                    <p className="rounded-2xl bg-[#F4FBF8] p-2.5 leading-relaxed">
+                      <strong className="text-[#0D685E]">1. Chiêu trò:</strong> {item.stepTrick}
+                    </p>
+                    <p className="rounded-2xl bg-[#FFFBEB] p-2.5 leading-relaxed">
+                      <strong className="text-[#92400E]">2. Dấu hiệu nhận biết:</strong> {item.stepSign}
+                    </p>
+                    <p className="rounded-2xl bg-[#ECFDF5] p-2.5 leading-relaxed">
+                      <strong className="text-[#065F46]">3. Cách xử lý an toàn:</strong> {item.stepAction}
+                    </p>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void speakAlertVietnamese(
+                            `${item.title}. ${item.stepTrick} ${item.stepAction}`,
+                            item.audioKey
+                          )
+                        }
+                        className="inline-flex flex-1 items-center justify-center gap-1 rounded-xl bg-[#E9FAF5] px-3 py-2 text-[11px] font-extrabold text-[#0D685E]"
+                      >
+                        <Volume2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        Nghe đọc 1 phút
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onAnalyzeSample(`${item.title}. ${item.stepTrick}`)}
+                        className="inline-flex flex-1 items-center justify-center gap-1 rounded-xl bg-[#0D685E] px-3 py-2 text-[11px] font-extrabold text-white"
+                      >
+                        <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                        Quét thử mẫu này
+                      </button>
+                      {realVideoIdx >= 0 && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenVideoAt(realVideoIdx)}
+                          className="inline-flex items-center justify-center gap-1 rounded-xl bg-[#FEF2F2] px-3 py-2 text-[11px] font-extrabold text-[#991B1B]"
+                        >
+                          <Video className="h-3.5 w-3.5" aria-hidden="true" />
+                          Xem Video
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

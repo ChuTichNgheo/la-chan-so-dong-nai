@@ -22,6 +22,7 @@ interface VideoSlideCardProps {
   isFirst: boolean;
   muted: boolean;
   largeCaption: boolean;
+  onAutoMuted: () => void;
   onToggleMute: () => void;
   onToggleCaption: () => void;
   onOpenDetails: () => void;
@@ -36,6 +37,7 @@ export function VideoSlideCard({
   isFirst,
   muted,
   largeCaption,
+  onAutoMuted,
   onToggleMute,
   onToggleCaption,
   onOpenDetails,
@@ -54,11 +56,21 @@ export function VideoSlideCard({
     if (!vid || !hasRealVideo) return;
     if (isActive && !paused) {
       vid.muted = muted;
-      void vid.play().catch(() => {});
+      const playPromise = vid.play();
+      if (playPromise) {
+        playPromise.catch(() => {
+          // If mobile browser blocks unmuted autoplay on direct URL load, gracefully fallback to muted play
+          if (!vid.muted) {
+            vid.muted = true;
+            onAutoMuted();
+            void vid.play().catch(() => {});
+          }
+        });
+      }
     } else {
       vid.pause();
     }
-  }, [isActive, paused, muted, hasRealVideo]);
+  }, [isActive, paused, muted, hasRealVideo, onAutoMuted]);
 
   function handleTapStage() {
     const vid = videoRef.current;
@@ -66,8 +78,15 @@ export function VideoSlideCard({
       setPaused((p) => !p);
       return;
     }
+    // If currently muted because autoplay policy kicked in, tapping stage unmutes immediately!
+    if (muted && !vid.paused) {
+      vid.muted = false;
+      onToggleMute();
+      return;
+    }
     if (vid.paused) {
       setPaused(false);
+      vid.muted = muted;
       void vid.play().catch(() => {});
     } else {
       setPaused(true);
@@ -87,17 +106,19 @@ export function VideoSlideCard({
   return (
     <article className="relative h-full w-full shrink-0 snap-start snap-always overflow-hidden bg-gradient-to-b from-[#072623] via-[#081A1E] to-[#040D10]">
       {hasRealVideo ? (
-        <video
-          ref={videoRef}
-          src={item.src}
-          loop
-          playsInline
-          preload={isActive ? 'metadata' : 'none'}
-          muted={muted}
-          onClick={handleTapStage}
-          onError={() => setVideoFailed(true)}
-          className="absolute inset-0 h-full w-full object-cover"
-        />
+        <div className="absolute inset-0 pb-16 pt-12">
+          <video
+            ref={videoRef}
+            src={item.src}
+            loop
+            playsInline
+            preload={isActive ? 'metadata' : 'none'}
+            muted={muted}
+            onClick={handleTapStage}
+            onError={() => setVideoFailed(true)}
+            className="h-full w-full object-contain"
+          />
+        </div>
       ) : (
         <div
           onClick={handleTapStage}
@@ -107,6 +128,17 @@ export function VideoSlideCard({
             Không tải được tệp video trên thiết bị này. Bấm &ldquo;3 bước&rdquo; bên phải để xem hướng dẫn nhanh.
           </p>
         </div>
+      )}
+
+      {hasRealVideo && muted && !paused && (
+        <button
+          type="button"
+          onClick={onToggleMute}
+          className="absolute top-16 left-1/2 z-20 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-[#F59E0B] px-3.5 py-1.5 text-xs font-extrabold text-[#0F172A] shadow-lg"
+        >
+          <Volume2 className="h-4 w-4" aria-hidden="true" />
+          Chạm để bật âm thanh
+        </button>
       )}
 
       {paused && (

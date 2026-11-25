@@ -246,9 +246,11 @@ export function ScannerScreen({
       <div className={`rounded-3xl border-2 p-4 shadow-sm ${meta.bgClass} ${meta.borderClass}`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <AlertBadge level={result.level} customLabel={result.badge} />
-          {uiMode === 'pro' && (
-            <span className="text-[11px] font-bold text-[#475569]">{SOURCE_LABELS[result.source]}</span>
-          )}
+          <span className="rounded-full bg-white/80 px-2.5 py-0.5 text-[10.5px] font-bold text-[#475569]">
+            {SOURCE_LABELS[result.source]}
+            {uiMode === 'pro' && result.modelUsed ? ` • ${result.modelUsed}` : ''}
+            {uiMode === 'pro' && result.ragContextCount ? ` • RAG(${result.ragContextCount})` : ''}
+          </span>
         </div>
 
         <h1 className={`mt-3 font-[family-name:var(--font-lexend)] text-base font-extrabold ${meta.textClass}`}>
@@ -261,10 +263,14 @@ export function ScannerScreen({
           </div>
         )}
 
-        {typeof result.communityMatches === 'number' && result.communityMatches > 0 && (
-          <div className="mt-3 flex items-center gap-1.5 rounded-2xl bg-[#FEF2F2] p-3 text-xs font-bold text-[#991B1B]">
-            <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
-            Trùng {result.communityMatches} báo cáo đã được cộng đồng Đồng Nai xác minh
+        {(result.communitySummary ||
+          (typeof result.communityMatches === 'number' && result.communityMatches > 0)) && (
+          <div className="mt-3 flex items-start gap-2 rounded-2xl bg-[#FEF2F2] p-3 text-xs font-bold text-[#991B1B]">
+            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>
+              {result.communitySummary ||
+                `Trùng ${result.communityMatches} báo cáo đã được cộng đồng Đồng Nai xác minh`}
+            </span>
           </div>
         )}
 

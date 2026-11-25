@@ -6,6 +6,7 @@ import { isValidVietnamesePhone, normalizePhoneDigits } from '@/lib/phone';
 import { maskSensitiveTarget } from '@/lib/privacy';
 import { speakAlertVietnamese } from '@/lib/speech';
 import type { AnalyzeResult, AppUserProfile, FamilyAlertItem, ScreenId } from '@/types';
+import { FamilyDeepfakeShieldCard } from './FamilyDeepfakeShieldCard';
 import { FamilyReceiverPanel } from './FamilyReceiverPanel';
 
 interface FamilyScreenProps {
@@ -416,6 +417,8 @@ export function FamilyScreen({
           onNavigate={onNavigate}
         />
       )}
+
+      <FamilyDeepfakeShieldCard onNotify={onNotify} />
     </section>
   );
 }

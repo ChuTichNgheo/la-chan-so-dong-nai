@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUserProfile } from '@/lib/auth';
 import { getSupabaseServerClient } from '@/lib/db';
+import { callGeminiJson, hasGeminiKeyConfigured } from '@/lib/gemini-client';
 import { maskSensitiveTarget } from '@/lib/privacy';
 import type { ScamReport } from '@/types';
 
@@ -152,8 +153,7 @@ function mapHeadlineLocally(h: RssHeadline): ExtractedDraft {
 }
 
 async function normalizeWithGemini(headlines: RssHeadline[]): Promise<ExtractedDraft[] | null> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || headlines.length === 0) return null;
+  if (!hasGeminiKeyConfigured() || headlines.length === 0) return null;
 
   const prompt = `Bạn là hệ thống thu thập tình báo phòng chống lừa đảo cho Đội Thanh niên tình nguyện tỉnh Đồng Nai.
 Dưới đây là các tin tức mới nhất từ báo chí chính thống Việt Nam:
@@ -163,51 +163,28 @@ Hãy tổng hợp thành đúng 3 bản ghi cảnh báo lừa đảo ngắn gọ
 Trả về JSON array hợp lệ theo đúng schema:
 [{"type":"Đường dẫn giả mạo | Giả danh công an / cơ quan | Tuyển CTV việc nhẹ lương cao | Giả người thân / thủ đoạn mới","target":"tên thủ đoạn / link / SĐT ngắn gọn (dưới 55 ký tự)","area":"P. Trấn Biên | P. Tân Phong | TP. Long Khánh | H. Long Thành | Toàn tỉnh Đồng Nai","description":"[Nguồn báo] tóm tắt rõ thủ đoạn và cảnh báo trong 1-2 câu tiếng Việt"}]`;
 
-  try {
-    const model = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 9000);
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.2 },
-        }),
-        signal: controller.signal,
-      }
-    );
-    clearTimeout(timer);
-    if (!res.ok) return null;
+  const aiRes = await callGeminiJson<unknown>({
+    parts: [{ text: prompt }],
+    temperature: 0.2,
+    timeoutMs: 9500,
+  });
 
-    const payload = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const raw = payload.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!raw) return null;
+  if (!aiRes || !Array.isArray(aiRes.data)) return null;
 
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return null;
-
-    const valid: ExtractedDraft[] = [];
-    for (const item of parsed) {
-      if (!item || typeof item !== 'object') continue;
-      const obj = item as Partial<ExtractedDraft>;
-      if (obj.type && obj.target && obj.description) {
-        valid.push({
-          type: String(obj.type).trim().slice(0, 60),
-          target: String(obj.target).trim().slice(0, 80),
-          area: String(obj.area || 'Toàn tỉnh Đồng Nai').trim().slice(0, 50),
-          description: String(obj.description).trim().slice(0, 260),
-        });
-      }
+  const valid: ExtractedDraft[] = [];
+  for (const item of aiRes.data) {
+    if (!item || typeof item !== 'object') continue;
+    const obj = item as Partial<ExtractedDraft>;
+    if (obj.type && obj.target && obj.description) {
+      valid.push({
+        type: String(obj.type).trim().slice(0, 60),
+        target: String(obj.target).trim().slice(0, 80),
+        area: String(obj.area || 'Toàn tỉnh Đồng Nai').trim().slice(0, 50),
+        description: String(obj.description).trim().slice(0, 260),
+      });
     }
-    return valid.length > 0 ? valid.slice(0, 3) : null;
-  } catch {
-    return null;
   }
+  return valid.length > 0 ? valid.slice(0, 3) : null;
 }
 
 export async function POST() {
