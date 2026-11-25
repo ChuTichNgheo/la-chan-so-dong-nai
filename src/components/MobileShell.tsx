@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { BarChart3, Flag, Gamepad2, Home, Search, Video, WifiOff } from 'lucide-react';
+import { BarChart3, Flag, Gamepad2, Home, Info, Search, Video, WifiOff } from 'lucide-react';
 import { BOTTOM_NAV_TABS, SCREEN_TAB_MAP } from '@/config/navigation';
 import type { ScreenId } from '@/types';
 import { BrandLogo } from './BrandLogo';
@@ -12,6 +12,7 @@ interface MobileShellProps {
   seniorMode: boolean;
   offlineMode: boolean;
   wideRadar: boolean;
+  toastMessage: string | null;
   onNavigate: (screen: ScreenId) => void;
   onToggleSenior: () => void;
   onOpenMascot: () => void;
@@ -31,6 +32,7 @@ export function MobileShell({
   seniorMode,
   offlineMode,
   wideRadar,
+  toastMessage,
   onNavigate,
   onToggleSenior,
   onOpenMascot,
@@ -81,7 +83,7 @@ export function MobileShell({
         </header>
 
         {offlineMode && (
-          <div className="flex items-center justify-center gap-1.5 bg-[#FFFBEB] px-3 py-1.5 text-xs font-bold text-[#92400E] border-b border-[#D97706]">
+          <div className="flex items-center justify-center gap-1.5 border-b border-[#D97706] bg-[#FFFBEB] px-3 py-1.5 text-xs font-bold text-[#92400E]">
             <WifiOff className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span>Đang chạy Ngoại tuyến (Tầng 1 Luật tất định)</span>
           </div>
@@ -89,7 +91,19 @@ export function MobileShell({
 
         <main className="flex-1 overflow-y-auto px-3.5 pt-3.5 pb-24">{children}</main>
 
-        <CunAiMascot onClick={onOpenMascot} screenId={activeScreen} />
+        {toastMessage && (
+          <div
+            role="status"
+            className="mx-3 mb-2 flex items-center gap-2 rounded-xl bg-[#0F172A] px-3 py-2 text-xs font-semibold text-white shadow-lg"
+          >
+            <Info className="h-4 w-4 shrink-0 text-[#FCD34D]" aria-hidden="true" />
+            <span>{toastMessage}</span>
+          </div>
+        )}
+
+        {activeScreen !== 'M05' && (
+          <CunAiMascot onClick={onOpenMascot} screenId={activeScreen} />
+        )}
 
         <nav
           aria-label="Điều hướng chính"

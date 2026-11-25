@@ -1,19 +1,25 @@
 # NHẬT KÝ BÀN GIAO AI (Cập nhật mỗi 2 giờ hoặc trước khi đổi AI)
 
 ## Trạng thái hiện tại
-- Giai đoạn: Khởi tạo xong khung xương Next.js + API routes khung + `npm run build`
-- Tính năng đã có khung:
+- Giai đoạn: Hoàn thiện Cụm A (M01 + M01b + M02 + Cún AI + Giọng đọc 3 tầng + Audio fallback)
+- Tính năng đã chạy ổn định:
   - [x] Khung Next.js 16 App Router + Tailwind + Lucide + Supabase client
-  - [x] `MobileShell` + 5 tab đáy + nút Chế độ 65+ & Báo cáo
-  - [x] API Routes khung: `/api/analyze`, `/api/tts`, `/api/reports`, `/api/reports/[id]`
-  - [x] 8 thư mục màn hình `m01-home`..`m08-system` nối vào `src/app/page.tsx`
-  - [ ] Tích hợp Gemini API thật trong `/api/analyze` (Dev 1)
-  - [ ] Hoàn thiện UI & logic chi tiết từng màn hình M01–M08 (Dev 1 & Dev 2)
+  - [x] `MobileShell` + 5 tab đáy + toast thông báo + Chế độ 65+
+  - [x] M01–M01b–M02: 4 chip mẫu nhanh, Micro giọng nói (`vi-VN`), highlight từ khóa nguy hiểm, chuyển 4 mức cảnh báo, đọc giọng 3 tầng + 13 file `.mp3` trong `public/audio/`
+  - [x] Cún AI SVG + `CunAiSheet` (4 luồng dẫn đường, Human-in-the-Loop)
+  - [ ] Cụm B: Hoàn thiện sâu M04 + M07 (Supabase + PIN + Canvas Zalo) + M03
+  - [ ] Cụm C: Hoàn thiện M05 (Video thật + 10 kịch bản) + M06 (Mini Game 5 màn + 10 bài) + M08
+
+## Hợp đồng dữ liệu (JSON Contract trong `src/types/index.ts` - Không tự ý đổi tên trường)
+- `POST /api/analyze`: nhận `{ text: string, offline?: boolean }` -> trả `{ level, badge, title, reasons, highlights, speech, source }`
+- `GET /api/reports`: trả `{ stats: RadarStats, queue: ScamReport[], recentApproved: ScamReport[], source }`
+- `POST /api/reports`: nhận `{ type, target, area, description }` -> trả `{ report: ScamReport, source }`
+- `PATCH /api/reports/[id]`: nhận `{ status: 'approved'|'rejected', pin?: string }` -> trả `{ report, source }`
 
 ## Việc tiếp theo cần làm ngay
-- Dev 1 (`feat/dev1-core`): Triển khai Tầng 1 + Gemini API thật ở `src/app/api/analyze/route.ts`, giọng đọc `src/lib/speech.ts`, giao diện `m01-home/`, `m02-scanner/`, `m08-system/`.
-- Dev 2 (`feat/dev2-community`): Tạo bảng `scam_reports` từ `supabase/schema.sql`, điền `.env.local`, hoàn thiện `m03-family/`, `m04-report/`, `m05-videos/`, `m06-learning/`, `m07-radar/`.
+- Hoàn thiện Cụm B (M04 + M07 + M03) kết nối Supabase thật.
 
 ## Nhật ký Công cụ AI & Thư viện
 - Công cụ hỗ trợ lập trình: Antigravity (Gemini)
 - API & Nền tảng: Next.js 16, TypeScript, Tailwind CSS, Lucide React, Supabase (`@supabase/supabase-js`), Gemini API, Web Speech API, HTML5 Canvas
+- Tài nguyên media từ Vòng 1: 13 file giọng đọc `.mp3` trong `public/audio/`
