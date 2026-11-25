@@ -32,6 +32,7 @@ export default function HomePage() {
   const [seniorMode, setSeniorMode] = useState(false);
   const [offlineMode, setOfflineMode] = useState(false);
   const [wideRadar, setWideRadar] = useState(false);
+  const [videoStartIdx, setVideoStartIdx] = useState(0);
   const [analyzing, setAnalyzing] = useState(false);
   const [scannedText, setScannedText] = useState('');
   const [scanResult, setScanResult] = useState<AnalyzeResult | null>(null);
@@ -222,8 +223,23 @@ export default function HomePage() {
       {activeScreen === 'M04' && (
         <ReportScreen scannedText={scannedText} onNotify={notify} />
       )}
-      {activeScreen === 'M05' && <VideosScreen />}
-      {activeScreen === 'M06' && <LearningScreen />}
+      {activeScreen === 'M05' && (
+        <VideosScreen
+          key={videoStartIdx}
+          initialIndex={videoStartIdx}
+          onNavigate={setActiveScreen}
+          onNotify={notify}
+        />
+      )}
+      {activeScreen === 'M06' && (
+        <LearningScreen
+          onOpenVideoAt={(idx) => {
+            setVideoStartIdx(idx);
+            setActiveScreen('M05');
+          }}
+          onNotify={notify}
+        />
+      )}
       {activeScreen === 'M07' && (
         <RadarScreen
           wideRadar={wideRadar}
@@ -245,6 +261,7 @@ export default function HomePage() {
               return next;
             });
           }}
+          onTryPoliceSample={() => void handleAnalyze(PRESET_INPUTS.danger, true)}
         />
       )}
       <CunAiSheet
