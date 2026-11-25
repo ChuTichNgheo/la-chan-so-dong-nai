@@ -32,6 +32,14 @@ export interface DynamicRule {
   createdAt: string;
 }
 
+export interface UrlInspectionReport {
+  originalUrl: string;
+  resolvedUrl?: string;
+  hostname: string;
+  flags: string[];
+  risk: RiskLevel;
+}
+
 export interface AnalyzeRequest {
   text: string;
   offline?: boolean;
@@ -47,6 +55,8 @@ export interface AnalyzeResult {
   highlights: string[];
   speech: string;
   extractedText?: string;
+  urlReports?: UrlInspectionReport[];
+  communityMatches?: number;
   source: 'hybrid' | 'db' | 'offline';
 }
 
@@ -69,6 +79,18 @@ export interface CreateReportPayload {
   target: string;
   area: string;
   description: string;
+}
+
+export interface FamilyAlertItem {
+  id: string;
+  senderId?: string | null;
+  senderName: string;
+  targetPhone: string;
+  riskLevel: RiskLevel;
+  snippet: string;
+  status: 'sent' | 'acknowledged';
+  acknowledgedBy?: string | null;
+  createdAt: string;
 }
 
 export interface RadarBreakdownItem {

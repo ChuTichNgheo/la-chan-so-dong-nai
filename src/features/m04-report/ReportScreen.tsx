@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { CheckCircle2, Copy, ExternalLink, Lock, Phone } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Camera, CheckCircle2, Copy, ExternalLink, Lock, Phone } from 'lucide-react';
 import { OFFICIAL_HOTLINES } from '@/config/hotlines';
+import { compressImageToBase64 } from '@/lib/image-compress';
 import { maskSensitiveTarget } from '@/lib/privacy';
 import { submitNewReport } from '@/lib/report-store';
 
@@ -20,6 +21,43 @@ export function ReportScreen({ scannedText, onNotify }: ReportScreenProps) {
   );
   const [submittedInfo, setSubmittedInfo] = useState<{ id: string; source: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [autofilling, setAutofilling] = useState(false);
+  const evidenceFileRef = useRef<HTMLInputElement | null>(null);
+
+  async function handleEvidenceUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setAutofilling(true);
+    try {
+      const { base64, mimeType } = await compressImageToBase64(file);
+      const res = await fetch('/api/reports/autofill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, imageMimeType: mimeType }),
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        onNotify(err.error || 'Chưa trích xuất được thông tin từ ảnh.');
+        return;
+      }
+      const data = (await res.json()) as {
+        type: string;
+        target: string;
+        area: string;
+        description: string;
+      };
+      setType(data.type);
+      if (data.target) setTarget(data.target);
+      if (data.area) setArea(data.area);
+      if (data.description) setDescription(data.description);
+      onNotify('AI đã tự bóc thông tin từ ảnh bằng chứng vào phiếu!');
+    } catch {
+      onNotify('Không đọc được tệp ảnh bằng chứng.');
+    } finally {
+      setAutofilling(false);
+    }
+  }
 
   const packetText = `[TIN BÁO LỪA ĐẢO - ĐỒNG NAI] Thủ đoạn: ${type} • Đối tượng: ${
     maskSensitiveTarget(target) || '(chưa nhập)'
@@ -67,19 +105,39 @@ export function ReportScreen({ scannedText, onNotify }: ReportScreenProps) {
             Xác minh trước khi công khai để chống vu khống.
           </p>
         </div>
-        {scannedText && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <input
+            ref={evidenceFileRef}
+            type="file"
+            accept="image/*"
+            onChange={(e) => void handleEvidenceUpload(e)}
+            className="hidden"
+          />
           <button
             type="button"
-            onClick={() => {
-              setTarget(scannedText.slice(0, 60));
-              setDescription(scannedText);
-              onNotify('Đã chép nội dung vừa quét từ M02 vào phiếu.');
-            }}
-            className="shrink-0 rounded-full bg-[#E9FAF5] px-3 py-1.5 text-[11px] font-bold text-[#0D685E]"
+            disabled={autofilling}
+            onClick={() => evidenceFileRef.current?.click()}
+            data-screen="M04"
+            data-ui="btn-autofill-evidence"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#FEF3C7] px-3 py-1.5 text-[11px] font-extrabold text-[#92400E]"
           >
-            Lấy tin vừa quét
+            <Camera className="h-3.5 w-3.5" aria-hidden="true" />
+            {autofilling ? 'Đang đọc ảnh...' : 'Tự điền từ ảnh'}
           </button>
-        )}
+          {scannedText && (
+            <button
+              type="button"
+              onClick={() => {
+                setTarget(scannedText.slice(0, 60));
+                setDescription(scannedText);
+                onNotify('Đã chép nội dung vừa quét từ M02 vào phiếu.');
+              }}
+              className="shrink-0 rounded-full bg-[#E9FAF5] px-3 py-1.5 text-[11px] font-bold text-[#0D685E]"
+            >
+              Lấy tin vừa quét
+            </button>
+          )}
+        </div>
       </div>
 
       <form

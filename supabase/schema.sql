@@ -57,6 +57,21 @@ create table if not exists public.dynamic_rules (
   created_at timestamptz not null default now()
 );
 
+-- 5. Bảng Cảnh báo Gia đình xuyên thiết bị (M03)
+create table if not exists public.family_alerts (
+  id text primary key,
+  sender_id text references public.app_users(id) on delete set null,
+  sender_name text not null,
+  target_phone text not null,
+  risk_level text not null default 'danger',
+  snippet text not null,
+  status text not null default 'sent' check (status in ('sent', 'acknowledged')),
+  acknowledged_by text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_family_alerts_phone on public.family_alerts (target_phone, created_at desc);
+
 -- Tài khoản Demo mặc định:
 -- Người dân: nguoidan / 123456
 -- Quản trị (Đội TNTN): doantn / admin123

@@ -1,7 +1,7 @@
 {
   "name": "Lá Chắn Số Đồng Nai — INFINITY AI",
   "short_name": "Lá Chắn Số",
-  "description": "Ứng dụng phòng chống lừa đảo trực tuyến và kỹ năng số cho người dân Đồng Nai",
+  "description": "Ứng dụng phòng chống lừa đảo trực tuyến và bảo vệ người cao tuổi tại Đồng Nai.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F4FBF8",
@@ -9,9 +9,10 @@
   "lang": "vi",
   "icons": [
     {
-      "src": "/favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }

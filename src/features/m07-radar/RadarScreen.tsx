@@ -7,6 +7,7 @@ import { fetchRadarReports, moderateReportStatus } from '@/lib/report-store';
 import { renderZaloAlertCardDataUrl } from '@/lib/zalo-card-canvas';
 import type { AppUserProfile, RadarBreakdownItem, RadarStats, ScamReport, ScreenId } from '@/types';
 import { AdminModerationPanel } from './AdminModerationPanel';
+import { RadarLookupCard } from './RadarLookupCard';
 
 interface RadarScreenProps {
   wideRadar: boolean;
@@ -117,6 +118,8 @@ export function RadarScreen({
           </button>
         </div>
       </div>
+
+      <RadarLookupCard />
 
       <div className="grid grid-cols-3 gap-2.5 text-center tabular-nums">
         <div className="rounded-3xl bg-white p-3 shadow-[0_4px_18px_rgba(13,104,94,0.06)]">

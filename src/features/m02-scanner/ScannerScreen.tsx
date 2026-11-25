@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CheckCircle2, Flag, Loader2, PhoneCall, Square, Volume2 } from 'lucide-react';
+import { CheckCircle2, Flag, Globe, Loader2, PhoneCall, ShieldAlert, Square, Volume2 } from 'lucide-react';
 import { AlertBadge } from '@/components/AlertBadge';
 import { RISK_LEVEL_META } from '@/config/theme';
 import { speakAlertVietnamese, stopVietnameseSpeech } from '@/lib/speech';
@@ -175,6 +175,39 @@ export function ScannerScreen({
         {scannedText && (
           <div className="mt-3 rounded-2xl bg-white p-3 text-xs leading-relaxed text-[#0F172A]">
             {renderHighlightedSnippet(scannedText, result.highlights)}
+          </div>
+        )}
+
+        {((result.urlReports && result.urlReports.length > 0) ||
+          (typeof result.communityMatches === 'number' && result.communityMatches > 0)) && (
+          <div className="mt-3 space-y-2 rounded-2xl bg-white/90 p-3 text-xs">
+            <div className="flex items-center gap-1.5 font-extrabold text-[#0D685E]">
+              <Globe className="h-3.5 w-3.5" aria-hidden="true" />
+              Kiểm tra kỹ thuật đường link &amp; cộng đồng
+            </div>
+            {typeof result.communityMatches === 'number' && result.communityMatches > 0 && (
+              <div className="flex items-center gap-1.5 rounded-xl bg-[#FEF2F2] px-2.5 py-1.5 font-bold text-[#991B1B]">
+                <ShieldAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                Trùng {result.communityMatches} báo cáo đã được xác minh tại Đồng Nai
+              </div>
+            )}
+            {result.urlReports?.map((u, idx) => (
+              <div key={idx} className="rounded-xl bg-[#F4FBF8] p-2.5 text-[11px]">
+                <div className="font-bold text-[#0F172A] break-all">
+                  Tên miền: <span className="text-[#0D685E]">{u.hostname}</span>
+                </div>
+                {u.resolvedUrl && u.resolvedUrl !== u.originalUrl && (
+                  <div className="mt-0.5 text-[#92400E] break-all">
+                    Chuyển hướng thật: {u.resolvedUrl}
+                  </div>
+                )}
+                <ul className="mt-1 space-y-0.5 text-[#475569]">
+                  {u.flags.map((f, fi) => (
+                    <li key={fi}>• {f}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
         )}
 

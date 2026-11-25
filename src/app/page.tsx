@@ -286,7 +286,14 @@ export default function HomePage() {
           onNotify={notify}
         />
       )}
-      <CunAiSheet open={cunOpen} onClose={() => setCunOpen(false)} onRunFlow={(flow) => void handleRunCunFlow(flow)} />
+      <CunAiSheet
+        open={cunOpen}
+        offlineMode={offlineMode}
+        onClose={() => setCunOpen(false)}
+        onRunFlow={(flow) => void handleRunCunFlow(flow)}
+        onNavigate={setActiveScreen}
+        onAnalyzeText={(t) => void handleAnalyze(t)}
+      />
       <CunAiGuideOverlay active={Boolean(guideStep)} step={guideStep} onStop={stopGuide} />
     </MobileShell>
   );

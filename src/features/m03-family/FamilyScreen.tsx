@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Eye, EyeOff, Flag, Lock, PhoneCall, Send, Share2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Eye, EyeOff, Lock, MessageSquare, PhoneCall, Send, Share2 } from 'lucide-react';
 import { maskSensitiveTarget } from '@/lib/privacy';
 import { speakAlertVietnamese } from '@/lib/speech';
-import type { AnalyzeResult, AppUserProfile, ScreenId } from '@/types';
+import type { AnalyzeResult, AppUserProfile, FamilyAlertItem, ScreenId } from '@/types';
+import { FamilyReceiverPanel } from './FamilyReceiverPanel';
 
 interface FamilyScreenProps {
   scannedText: string;
@@ -16,6 +17,7 @@ interface FamilyScreenProps {
 }
 
 const CONTACT_STORAGE_KEY = 'lacd_family_contact_v1';
+const ALERTS_STORAGE_KEY = 'lacd_family_alerts_v1';
 
 export function FamilyScreen({
   scannedText,
@@ -32,60 +34,92 @@ export function FamilyScreen({
   const [contactPhone, setContactPhone] = useState(currentUser?.trustedPhone ?? '0912345678');
   const [editing, setEditing] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [alerts, setAlerts] = useState<FamilyAlertItem[]>([]);
+  const [alertSource, setAlertSource] = useState<'supabase' | 'fallback'>('fallback');
+  const [refreshing, setRefreshing] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const loadAlerts = useCallback(async (phone: string) => {
+    setRefreshing(true);
+    try {
+      const cleanPhone = phone.replace(/\D/g, '');
+      const res = await fetch(`/api/family-alerts?phone=${encodeURIComponent(cleanPhone)}`, {
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { alerts?: FamilyAlertItem[]; source?: 'supabase' | 'fallback' };
+        if (data.source === 'supabase' && Array.isArray(data.alerts)) {
+          setAlerts(data.alerts);
+          setAlertSource('supabase');
+          setRefreshing(false);
+          return;
+        }
+      }
+    } catch {
+      // Fallback to local cache
+    }
+    try {
+      const cached = window.localStorage.getItem(ALERTS_STORAGE_KEY);
+      if (cached) setAlerts(JSON.parse(cached) as FamilyAlertItem[]);
+    } catch {
+      // Ignore storage error
+    }
+    setAlertSource('fallback');
+    setRefreshing(false);
+  }, []);
 
   useEffect(() => {
     let active = true;
     void Promise.resolve().then(() => {
       if (!active) return;
+      let phoneToLoad = currentUser?.trustedPhone ?? '0912345678';
       if (currentUser) {
         setContactName(currentUser.trustedName);
         setContactPhone(currentUser.trustedPhone);
-        return;
+      } else {
+        try {
+          const raw = window.localStorage.getItem(CONTACT_STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw) as { name?: string; phone?: string };
+            if (parsed.name) setContactName(parsed.name);
+            if (parsed.phone) {
+              setContactPhone(parsed.phone);
+              phoneToLoad = parsed.phone;
+            }
+          }
+        } catch {
+          // Keep default
+        }
       }
-      try {
-        const raw = window.localStorage.getItem(CONTACT_STORAGE_KEY);
-        if (!raw) return;
-        const parsed = JSON.parse(raw) as { name?: string; phone?: string };
-        if (parsed.name) setContactName(parsed.name);
-        if (parsed.phone) setContactPhone(parsed.phone);
-      } catch {
-        // Keep default contact
-      }
+      void loadAlerts(phoneToLoad);
     });
     return () => {
       active = false;
     };
-  }, [currentUser]);
+  }, [currentUser, loadAlerts]);
 
   async function handleSaveContact() {
     const cleanName = contactName.trim() || 'Người thân';
     const cleanPhone = contactPhone.trim() || '0912345678';
     try {
-      window.localStorage.setItem(
-        CONTACT_STORAGE_KEY,
-        JSON.stringify({ name: cleanName, phone: cleanPhone })
-      );
+      window.localStorage.setItem(CONTACT_STORAGE_KEY, JSON.stringify({ name: cleanName, phone: cleanPhone }));
     } catch {
-      // Ignore storage error
+      // Ignore
     }
     if (currentUser) {
-      try {
-        const res = await fetch('/api/user/profile', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trustedName: cleanName, trustedPhone: cleanPhone }),
-        });
-        if (res.ok) {
-          const data = (await res.json()) as { user?: AppUserProfile };
-          if (data.user) onUserUpdated(data.user);
-        }
-      } catch {
-        // Ignore network error
+      const res = await fetch('/api/user/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trustedName: cleanName, trustedPhone: cleanPhone }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { user?: AppUserProfile };
+        if (data.user) onUserUpdated(data.user);
       }
     }
     setEditing(false);
     onNotify(currentUser ? 'Đã lưu & đồng bộ lên tài khoản.' : 'Đã lưu danh bạ trên máy.');
+    void loadAlerts(cleanPhone);
   }
 
   const displayPhone = showPhone ? contactPhone : maskSensitiveTarget(contactPhone);
@@ -96,24 +130,71 @@ export function FamilyScreen({
   }): "${summarySnippet.slice(0, 120)}". Xin con gọi lại xác minh ngay!`;
 
   async function handleConfirmSend() {
-    setSent(true);
+    setSending(true);
+    try {
+      const res = await fetch('/api/family-alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetPhone: contactPhone,
+          senderName: currentUser?.fullName || 'Bác Tư (Đồng Nai)',
+          riskLevel: scanResult?.level ?? 'danger',
+          snippet: alertMessage,
+        }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { alert: FamilyAlertItem; source: 'supabase' | 'fallback' };
+        const nextList = [data.alert, ...alerts];
+        setAlerts(nextList);
+        setAlertSource(data.source);
+        try {
+          window.localStorage.setItem(ALERTS_STORAGE_KEY, JSON.stringify(nextList.slice(0, 10)));
+        } catch {
+          // Ignore
+        }
+      }
+    } finally {
+      setSending(false);
+    }
+
     if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       try {
         await navigator.share({ title: 'Cảnh báo khẩn từ Lá Chắn Số', text: alertMessage });
-        onNotify(`Đã mở chia sẻ thẻ cảnh báo tới ${contactName}.`);
+        onNotify(`Đã gửi cảnh báo tới ${contactName}.`);
         return;
       } catch {
-        // Fall back to clipboard
+        // Fallback to clipboard
       }
     }
     try {
       await navigator.clipboard.writeText(alertMessage);
-      onNotify(`Đã tạo & sao chép thẻ cảnh báo gửi ${contactName} (đã che SĐT).`);
+      onNotify(`Đã đẩy cảnh báo lên hệ thống & sao chép gửi ${contactName}.`);
     } catch {
-      onNotify(`Đã xác nhận gửi thẻ cảnh báo tới ${contactName}.`);
+      onNotify(`Đã gửi cảnh báo cho ${contactName}.`);
     }
     void speakAlertVietnamese('Đã gửi thẻ cảnh báo sang điện thoại người thân.', 'family');
   }
+
+  async function handleAcknowledge(id: string) {
+    await fetch('/api/family-alerts', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, acknowledgedBy: contactName.split('(')[0].trim() }),
+    });
+    const updated = alerts.map((a) =>
+      a.id === id ? { ...a, status: 'acknowledged' as const, acknowledgedBy: contactName.split('(')[0].trim() } : a
+    );
+    setAlerts(updated);
+    try {
+      window.localStorage.setItem(ALERTS_STORAGE_KEY, JSON.stringify(updated));
+    } catch {
+      // Ignore
+    }
+    onNotify('Đã xác nhận đã nhận tin — máy Ba sẽ thấy trạng thái này!');
+  }
+
+  const latestAlert = alerts[0];
+  const smsHref = `sms:${contactPhone.replace(/\D/g, '')}?body=${encodeURIComponent(alertMessage)}`;
 
   return (
     <section className="space-y-4" data-screen="M03">
@@ -148,7 +229,7 @@ export function FamilyScreen({
             view === 'receiver' ? 'bg-[#0D685E] text-white' : 'text-[#475569]'
           }`}
         >
-          Góc nhìn Chị Lan (Nhận)
+          Người thân nhận {alerts.some((a) => a.status === 'sent') ? '• Mới' : ''}
         </button>
       </div>
 
@@ -207,8 +288,23 @@ export function FamilyScreen({
             <p className="mt-1 text-[#0F172A]">{alertMessage}</p>
           </div>
 
+          {latestAlert && (
+            <div
+              className={`rounded-2xl px-3 py-2 text-xs font-bold ${
+                latestAlert.status === 'acknowledged'
+                  ? 'bg-[#ECFDF5] text-[#065F46]'
+                  : 'bg-[#E9FAF5] text-[#0D685E]'
+              }`}
+            >
+              {latestAlert.status === 'acknowledged'
+                ? `✓ ${latestAlert.acknowledgedBy || 'Người thân'} đã xác nhận xem cảnh báo!`
+                : `• Đã đẩy cảnh báo lên hệ thống (${alertSource}) — chờ người thân phản hồi`}
+            </div>
+          )}
+
           <button
             type="button"
+            disabled={sending}
             onClick={() => void handleConfirmSend()}
             data-screen="M03"
             data-ui="btn-confirm-send-family"
@@ -219,41 +315,39 @@ export function FamilyScreen({
             ) : (
               <Send className="h-4 w-4" aria-hidden="true" />
             )}
-            {sent ? 'Đã gửi & sao chép cho Chị Lan' : 'Xác nhận gửi cho Chị Lan ngay'}
+            {sending ? 'Đang gửi cảnh báo...' : 'Xác nhận gửi cho Chị Lan ngay'}
           </button>
 
-          <a
-            href={`tel:${contactPhone.replace(/\D/g, '')}`}
-            data-screen="M03"
-            data-ui="btn-call-family"
-            className="flex min-h-[46px] w-full items-center justify-center gap-2 rounded-2xl bg-[#E9FAF5] text-xs font-extrabold text-[#0D685E]"
-          >
-            <PhoneCall className="h-4 w-4" aria-hidden="true" />
-            Gọi điện thẳng cho {contactName.split('(')[0].trim()}
-          </a>
-        </div>
-      ) : (
-        <div className="space-y-3 rounded-3xl border-2 border-[#DC2626] bg-[#FEF2F2] p-4 text-xs text-[#991B1B]">
-          <div className="font-extrabold uppercase">Cảnh báo khẩn từ Ba (Bác Tư)</div>
-          <p className="rounded-2xl bg-white p-3 text-[#0F172A]">{alertMessage}</p>
           <div className="grid grid-cols-2 gap-2.5">
             <a
+              href={smsHref}
+              className="flex min-h-[46px] items-center justify-center gap-1.5 rounded-2xl bg-[#F4FBF8] text-xs font-extrabold text-[#0F172A]"
+            >
+              <MessageSquare className="h-4 w-4 text-[#0D685E]" aria-hidden="true" />
+              Nhắn SMS thật
+            </a>
+            <a
               href={`tel:${contactPhone.replace(/\D/g, '')}`}
-              className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl bg-[#0D685E] font-bold text-white"
+              data-screen="M03"
+              data-ui="btn-call-family"
+              className="flex min-h-[46px] items-center justify-center gap-1.5 rounded-2xl bg-[#E9FAF5] text-xs font-extrabold text-[#0D685E]"
             >
               <PhoneCall className="h-4 w-4" aria-hidden="true" />
-              Gọi lại cho Ba
+              Gọi điện thẳng
             </a>
-            <button
-              type="button"
-              onClick={() => onNavigate('M04')}
-              className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl bg-white font-bold text-[#991B1B] shadow-sm"
-            >
-              <Flag className="h-4 w-4" aria-hidden="true" />
-              Lập hồ sơ báo cáo
-            </button>
           </div>
         </div>
+      ) : (
+        <FamilyReceiverPanel
+          alerts={alerts}
+          fallbackMessage={alertMessage}
+          contactPhone={contactPhone}
+          sourceLabel={alertSource}
+          refreshing={refreshing}
+          onRefresh={() => void loadAlerts(contactPhone)}
+          onAcknowledge={(id) => void handleAcknowledge(id)}
+          onNavigate={onNavigate}
+        />
       )}
     </section>
   );
