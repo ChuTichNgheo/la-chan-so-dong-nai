@@ -4,6 +4,7 @@ import {
   INITIAL_MODERATION_QUEUE,
   INITIAL_RADAR_STATS,
 } from '@/data/mock-radar';
+import { getCurrentUserProfile } from '@/lib/auth';
 import { getSupabaseServerClient } from '@/lib/db';
 import { maskSensitiveTarget } from '@/lib/privacy';
 import type { CreateReportPayload, RadarBreakdownItem, ReportsApiResponse, ScamReport } from '@/types';
@@ -16,6 +17,7 @@ interface DbReportRow {
   area: string;
   description: string;
   status: 'pending' | 'approved' | 'rejected';
+  reporter_id?: string | null;
   created_at: string;
 }
 
@@ -28,6 +30,7 @@ function mapRow(row: DbReportRow): ScamReport {
     area: row.area,
     description: row.description,
     status: row.status,
+    reporterId: row.reporter_id ?? null,
     createdAt: row.created_at,
   };
 }
@@ -64,11 +67,14 @@ function buildBreakdown(approved: ScamReport[]): {
 }
 
 export async function GET() {
+  const user = await getCurrentUserProfile();
+  const isAdmin = user?.role === 'admin';
+
   const supabase = getSupabaseServerClient();
   if (!supabase) {
     return NextResponse.json<ReportsApiResponse>({
       stats: INITIAL_RADAR_STATS,
-      queue: INITIAL_MODERATION_QUEUE,
+      queue: isAdmin ? INITIAL_MODERATION_QUEUE : [],
       recentApproved: [],
       source: 'fallback',
     });
@@ -83,14 +89,14 @@ export async function GET() {
   if (error || !data) {
     return NextResponse.json<ReportsApiResponse>({
       stats: INITIAL_RADAR_STATS,
-      queue: INITIAL_MODERATION_QUEUE,
+      queue: isAdmin ? INITIAL_MODERATION_QUEUE : [],
       recentApproved: [],
       source: 'fallback',
     });
   }
 
   const mapped = (data as DbReportRow[]).map(mapRow);
-  const queue = mapped.filter((r) => r.status === 'pending');
+  const pendingRows = mapped.filter((r) => r.status === 'pending');
   const recentApproved = mapped.filter((r) => r.status === 'approved');
   const { breakdown, fakeLinkPercent } = buildBreakdown(recentApproved);
 
@@ -98,17 +104,26 @@ export async function GET() {
     stats: {
       totalReports: BASELINE_APPROVED_COUNT + recentApproved.length,
       fakeLinkPercent,
-      pendingCount: queue.length,
+      pendingCount: pendingRows.length,
       breakdown,
     },
-    queue,
-    recentApproved: recentApproved.slice(0, 5),
+    // Privacy & security: only return pending moderation queue to authenticated admins
+    queue: isAdmin ? pendingRows : [],
+    recentApproved: recentApproved.slice(0, 6),
     source: 'supabase',
   });
 }
 
 export async function POST(request: Request) {
   try {
+    const user = await getCurrentUserProfile();
+    if (user?.isLocked) {
+      return NextResponse.json(
+        { error: 'Tài khoản của bạn đang bị khóa gửi báo cáo.' },
+        { status: 403 }
+      );
+    }
+
     const body = (await request.json()) as Partial<CreateReportPayload>;
     const type = body.type?.trim() || '';
     const target = body.target?.trim() || '';
@@ -127,6 +142,7 @@ export async function POST(request: Request) {
       area,
       description,
       status: 'pending',
+      reporterId: user?.id ?? null,
       createdAt: new Date().toISOString(),
     };
 
@@ -143,6 +159,7 @@ export async function POST(request: Request) {
       area: newReport.area,
       description: newReport.description,
       status: 'pending',
+      reporter_id: user?.id ?? null,
       created_at: newReport.createdAt,
     });
 

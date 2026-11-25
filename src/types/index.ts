@@ -1,10 +1,42 @@
-export type ScreenId = 'M01' | 'M02' | 'M03' | 'M04' | 'M05' | 'M06' | 'M07' | 'M08';
+export type ScreenId = 'M01' | 'M02' | 'M03' | 'M04' | 'M05' | 'M06' | 'M07' | 'M08' | 'M09';
 
 export type RiskLevel = 'danger' | 'warn' | 'unknown' | 'safe';
+
+export type UserRole = 'user' | 'admin';
+
+export interface AppUserProfile {
+  id: string;
+  username: string;
+  fullName: string;
+  role: UserRole;
+  isLocked: boolean;
+  trustedName: string;
+  trustedPhone: string;
+  gameScore: number;
+  gameBadge: string;
+}
+
+export interface ScanHistoryItem {
+  id: string;
+  snippet: string;
+  riskLevel: RiskLevel;
+  title: string;
+  createdAt: string;
+}
+
+export interface DynamicRule {
+  id: string;
+  pattern: string;
+  level: Exclude<RiskLevel, 'unknown'>;
+  note: string;
+  createdAt: string;
+}
 
 export interface AnalyzeRequest {
   text: string;
   offline?: boolean;
+  imageBase64?: string;
+  imageMimeType?: string;
 }
 
 export interface AnalyzeResult {
@@ -14,6 +46,7 @@ export interface AnalyzeResult {
   reasons: string[];
   highlights: string[];
   speech: string;
+  extractedText?: string;
   source: 'hybrid' | 'db' | 'offline';
 }
 
@@ -27,6 +60,7 @@ export interface ScamReport {
   area: string;
   description: string;
   status: ReportStatus;
+  reporterId?: string | null;
   createdAt: string;
 }
 

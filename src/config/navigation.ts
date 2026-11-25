@@ -17,6 +17,7 @@ export const SCREEN_TITLES: Record<ScreenId, string> = {
   M06: 'Học tập & Mini Game',
   M07: 'Radar Đội tình nguyện',
   M08: 'Trạng thái Hệ thống & An toàn',
+  M09: 'Tài khoản & Phân quyền',
 };
 
 export const SCREEN_TAB_MAP: Record<ScreenId, NavTabItem['id']> = {
@@ -28,4 +29,5 @@ export const SCREEN_TAB_MAP: Record<ScreenId, NavTabItem['id']> = {
   M06: 'M06',
   M07: 'M07',
   M08: 'M01',
+  M09: 'M01',
 };

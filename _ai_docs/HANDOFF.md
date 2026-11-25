@@ -1,25 +1,13 @@
 # NHẬT KÝ BÀN GIAO AI (Cập nhật mỗi 2 giờ hoặc trước khi đổi AI)
 
 ## Trạng thái hiện tại
-- Giai đoạn: Hoàn thiện đủ MVP 8 màn hình (Cụm A + Cụm B + Cụm C).
+- Giai đoạn: Đã hoàn thiện full-stack 9 màn hình (`M01`–`M09`) + Auth & Phân quyền + UX/UI Vòng 1 Hero kết hợp nâng cấp 2026 (`npx tsc --noEmit && npm run lint && npm run build` pass `0` lỗi).
 - Tính năng đã chạy ổn định:
-  - [x] Cụm A: M01, M01b, M02, Giọng đọc 3 tầng + 13 file `.mp3`
-  - [x] Cún AI thuần hình cún, bay dẫn đường + hiệu ứng nhấn nút thật, dừng trước nút xác nhận cuối
-  - [x] Cụm B: M03 (che SĐT, 2 góc nhìn), M04 (`POST /api/reports`), M07 (Supabase + `VOLUNTEER_PIN` + Xuất thẻ Zalo PNG)
-  - [x] Cụm C: M05 (2 video `.mp4` thật + 10 kịch bản, phụ đề to, gửi Ba/Mẹ), M06 (Mini Game 5 màn đồng hồ 10s, chuỗi, 3 lá chắn, huy hiệu + 10 bài học 1 phút), M08 (4 trạng thái + giả lập mất mạng)
-
-## Hợp đồng dữ liệu (JSON Contract trong `src/types/index.ts`)
-- `POST /api/analyze` -> `{ level, badge, title, reasons, highlights, speech, source }`
-- `GET /api/reports` -> `{ stats: RadarStats, queue: ScamReport[], recentApproved: ScamReport[], source }`
-- `POST /api/reports` -> `{ report: ScamReport, source }`
-- `PATCH /api/reports/[id]` -> `{ report, source }`
+  - [x] Hệ thống Auth (`scrypt` + `HttpOnly Cookie`) & Phân quyền Người dân/Quản trị (`M09` + `M07`)
+  - [x] `M01` + `M01b` + `M02`: Hero Emerald Gradient + Spotlight Bar (Dán 1 chạm, Micro, Ảnh Gemini Vision), Bento Hỏi người thân & Radar 120 báo cáo, Live 2-Stage Scan Stepper
+  - [x] `M05`: Full-bleed Reels vuốt dọc + Segmented Story Progress Bars + Animated Story Cards & Audio Wave cho cả 10 kịch bản
+  - [x] `M06`: Interactive Chat Simulator (bong bóng tin nhắn + thanh đếm ngược 10s + phản xạ nhanh) + 10 bài học 1 phút
+  - [x] `MobileShell`: Web app gọn `max-w-[430px]` (không thẻ phụ bên ngoài), nút Cún AI nhỏ gọn + hiệu ứng nhấn nút trực tiếp
 
 ## Việc tiếp theo cần làm ngay
-- Giai đoạn 2 (Sáng tạo thêm tính năng ăn điểm Tiêu chí 3):
-  - Quét ảnh chụp màn hình tin nhắn (Gemini Vision OCR) ở M01.
-  - Deploy Vercel + kiểm thử thực tế trên điện thoại qua QR + viết `TECHNICAL_REPORT.md` & Slide ≤ 10 trang.
-
-## Nhật ký Công cụ AI & Thư viện
-- Công cụ hỗ trợ lập trình: Antigravity (Gemini)
-- API & Nền tảng: Next.js 16, TypeScript, Tailwind CSS, Lucide React, Supabase (`@supabase/supabase-js`), Gemini API, Web Speech API, HTML5 Canvas
-- Tài nguyên media từ Vòng 1: 13 file `.mp3` trong `public/audio/` và 2 file `.mp4` trong `public/videos/`
+- Đẩy code lên GitHub, chạy `supabase/schema.sql` trên Supabase SQL Editor, deploy lên Vercel & test quét QR bằng điện thoại thật.

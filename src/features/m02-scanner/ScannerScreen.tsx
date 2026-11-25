@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Flag, PhoneCall, Square, Volume2 } from 'lucide-react';
+import { CheckCircle2, Flag, Loader2, PhoneCall, Square, Volume2 } from 'lucide-react';
 import { AlertBadge } from '@/components/AlertBadge';
 import { RISK_LEVEL_META } from '@/config/theme';
 import { speakAlertVietnamese, stopVietnameseSpeech } from '@/lib/speech';
@@ -35,10 +35,7 @@ function renderHighlightedSnippet(text: string, highlights: string[]) {
       {parts.map((part, i) => {
         const isHit = cleanTerms.some((term) => term.toLowerCase() === part.toLowerCase());
         return isHit ? (
-          <mark
-            key={i}
-            className="rounded bg-[#FECACA] px-1 font-extrabold text-[#991B1B]"
-          >
+          <mark key={i} className="rounded bg-[#FECACA] px-1 font-extrabold text-[#991B1B]">
             {part}
           </mark>
         ) : (
@@ -71,15 +68,34 @@ export function ScannerScreen({
 
   if (loading) {
     return (
-      <section className="rounded-2xl border border-[#CBE4DC] bg-white p-4 shadow-sm" data-screen="M02">
-        <h1 className="font-[family-name:var(--font-lexend)] text-base font-extrabold text-[#0D685E]">
-          Đang đối chiếu 2 tầng bảo vệ...
-        </h1>
-        <div className="mt-2.5 space-y-1.5 text-xs text-[#475569]">
-          <p>• Tầng 1: Luật tất định &amp; danh sách báo cáo đã duyệt (&lt;50ms) — Đang kiểm</p>
-          <p className="font-semibold text-[#0D685E]">
-            • Tầng 2: Gemini AI phân tích dấu hiệu thao túng tâm lý...
-          </p>
+      <section className="space-y-3 rounded-3xl bg-white p-5 shadow-[0_8px_28px_rgba(13,104,94,0.08)]" data-screen="M02">
+        <div className="flex items-center gap-2.5">
+          <span className="grid h-9 w-9 place-items-center rounded-2xl bg-[#E9FAF5] text-[#0D685E]">
+            <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+          </span>
+          <div>
+            <h1 className="font-[family-name:var(--font-lexend)] text-base font-extrabold text-[#0F172A]">
+              Đang đối chiếu 2 tầng bảo vệ
+            </h1>
+            <p className="text-[11px] text-[#64748B]">Vui lòng chờ 1–2 giây...</p>
+          </div>
+        </div>
+
+        <div className="space-y-2 pt-1 text-xs">
+          <div className="flex items-center gap-2 rounded-2xl bg-[#ECFDF5] p-3 font-bold text-[#065F46]">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-[#059669]" aria-hidden="true" />
+            <span>Tầng 1: Quét luật tất định &amp; DB Đồng Nai (&lt;50ms)</span>
+          </div>
+          <div className="flex items-center gap-2 rounded-2xl bg-[#F4FBF8] p-3 font-bold text-[#0D685E]">
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+            <span>Tầng 2: Gemini AI đang phân tích dấu hiệu thao túng...</span>
+          </div>
+        </div>
+
+        <div className="space-y-2 pt-1">
+          <div className="h-3 w-3/4 animate-pulse rounded-full bg-slate-100" />
+          <div className="h-3 w-full animate-pulse rounded-full bg-slate-100" />
+          <div className="h-3 w-2/3 animate-pulse rounded-full bg-slate-100" />
         </div>
       </section>
     );
@@ -87,29 +103,29 @@ export function ScannerScreen({
 
   if (!result) {
     return (
-      <section className="space-y-3" data-screen="M02">
-        <div className="rounded-2xl border border-[#CBE4DC] bg-white p-4 text-center">
-          <p className="text-sm font-extrabold text-[#0F172A]">Chưa có nội dung kiểm tra</p>
-          <p className="mt-1 text-xs text-[#475569]">
-            Quay lại Trang chủ (M01) để dán tin nhắn, SĐT hoặc chọn xem thử 4 mức cảnh báo bên dưới.
+      <section className="space-y-4" data-screen="M02">
+        <div className="rounded-3xl bg-white p-5 text-center shadow-[0_6px_24px_rgba(13,104,94,0.07)]">
+          <p className="text-base font-extrabold text-[#0F172A]">Chưa có nội dung kiểm tra</p>
+          <p className="mt-1.5 text-xs text-[#475569]">
+            Quay lại Trang chủ hoặc chọn nhanh 1 trong 4 mức cảnh báo bên dưới để xem thử.
           </p>
           <button
             type="button"
             onClick={() => onNavigate('M01')}
             data-screen="M02"
             data-ui="btn-back-home"
-            className="mt-3 rounded-xl bg-[#0D685E] px-4 py-2 text-xs font-bold text-white"
+            className="mt-4 rounded-2xl bg-[#0D685E] px-5 py-2.5 text-xs font-bold text-white"
           >
             Về Trang chủ
           </button>
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2.5">
           {(['danger', 'warn', 'unknown', 'safe'] as RiskLevel[]).map((lvl) => (
             <button
               key={lvl}
               type="button"
               onClick={() => onPreviewPreset(lvl)}
-              className="rounded-xl border border-[#CBE4DC] bg-white px-3 py-2 text-xs font-bold text-[#0F172A]"
+              className="rounded-2xl bg-white px-3 py-3 text-xs font-bold text-[#0F172A] shadow-[0_4px_14px_rgba(13,104,94,0.05)]"
             >
               Thử mức: {RISK_LEVEL_META[lvl].label}
             </button>
@@ -122,8 +138,8 @@ export function ScannerScreen({
   const meta = RISK_LEVEL_META[result.level];
 
   return (
-    <section className="space-y-3" data-screen="M02">
-      <div className="grid grid-cols-4 gap-1 rounded-xl border border-[#CBE4DC] bg-white p-1">
+    <section className="space-y-4" data-screen="M02">
+      <div className="grid grid-cols-4 gap-1 rounded-2xl bg-white p-1.5 shadow-[0_4px_16px_rgba(13,104,94,0.05)]">
         {(['danger', 'warn', 'unknown', 'safe'] as RiskLevel[]).map((lvl) => (
           <button
             key={lvl}
@@ -131,7 +147,7 @@ export function ScannerScreen({
             onClick={() => onPreviewPreset(lvl)}
             data-screen="M02"
             data-ui={`tab-level-${lvl}`}
-            className={`rounded-lg py-1.5 text-[11px] font-bold transition ${
+            className={`rounded-xl py-1.5 text-[11px] font-bold transition ${
               result.level === lvl ? 'bg-[#0D685E] text-white' : 'text-[#475569]'
             }`}
           >
@@ -146,37 +162,37 @@ export function ScannerScreen({
         ))}
       </div>
 
-      <div className={`rounded-2xl border-2 p-4 shadow-sm ${meta.bgClass} ${meta.borderClass}`}>
+      <div className={`rounded-3xl border-2 p-4 shadow-sm ${meta.bgClass} ${meta.borderClass}`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <AlertBadge level={result.level} customLabel={result.badge} />
           <span className="text-[11px] font-bold text-[#475569]">{SOURCE_LABELS[result.source]}</span>
         </div>
 
-        <h1 className={`mt-2.5 font-[family-name:var(--font-lexend)] text-base font-extrabold ${meta.textClass}`}>
+        <h1 className={`mt-3 font-[family-name:var(--font-lexend)] text-base font-extrabold ${meta.textClass}`}>
           {result.title}
         </h1>
 
         {scannedText && (
-          <div className="mt-2.5 rounded-xl border border-[#CBE4DC] bg-white p-2.5 text-xs leading-relaxed text-[#0F172A]">
+          <div className="mt-3 rounded-2xl bg-white p-3 text-xs leading-relaxed text-[#0F172A]">
             {renderHighlightedSnippet(scannedText, result.highlights)}
           </div>
         )}
 
-        <ul className="mt-2.5 space-y-1.5 text-xs text-[#1E293B]">
+        <ul className="mt-3 space-y-2 text-xs text-[#1E293B]">
           {result.reasons.map((reason, idx) => (
-            <li key={idx} className="rounded-xl border border-[#CBE4DC] bg-white p-2.5">
+            <li key={idx} className="rounded-2xl bg-white p-3">
               <strong className="text-[#0D685E]">{idx + 1}.</strong> {reason}
             </li>
           ))}
         </ul>
 
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="mt-3.5 grid grid-cols-2 gap-2.5">
           <button
             type="button"
             onClick={() => void handleSpeakToggle(result.speech, result.level)}
             data-screen="M02"
             data-ui="btn-speak-alert"
-            className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-[#0D685E] bg-white px-3 text-xs font-extrabold text-[#0D685E]"
+            className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl bg-white px-3 text-xs font-extrabold text-[#0D685E] shadow-sm"
           >
             {speaking ? <Square className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
             {speaking ? 'Dừng đọc' : 'Nghe đọc cảnh báo'}
@@ -186,7 +202,7 @@ export function ScannerScreen({
             onClick={() => onNavigate('M04')}
             data-screen="M02"
             data-ui="btn-goto-report"
-            className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-[#DC2626] bg-white px-3 text-xs font-extrabold text-[#991B1B]"
+            className="flex min-h-[44px] items-center justify-center gap-1.5 rounded-2xl bg-white px-3 text-xs font-extrabold text-[#991B1B] shadow-sm"
           >
             <Flag className="h-4 w-4" aria-hidden="true" />
             Báo cáo ngay
@@ -199,10 +215,10 @@ export function ScannerScreen({
         onClick={() => onNavigate('M03')}
         data-screen="M02"
         data-ui="btn-ask-family-cta"
-        className="flex min-h-[50px] w-full items-center justify-center gap-2 rounded-2xl border-2 border-[#B45309] bg-[#F59E0B] text-sm font-extrabold text-[#0F172A] shadow-sm"
+        className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-[#F59E0B] text-sm font-extrabold text-[#0F172A] shadow-[0_6px_20px_rgba(245,158,11,0.28)]"
       >
         <PhoneCall className="h-4 w-4" aria-hidden="true" />
-        Hỏi người thân ngay (Cún AI dừng chờ bạn bấm)
+        Hỏi người thân ngay
       </button>
     </section>
   );

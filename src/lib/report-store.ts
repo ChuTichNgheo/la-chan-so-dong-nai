@@ -53,7 +53,7 @@ export async function fetchRadarReports(): Promise<ReportsApiResponse> {
 
 export async function submitNewReport(
   payload: CreateReportPayload
-): Promise<{ report: ScamReport; source: 'supabase' | 'fallback' }> {
+): Promise<{ report: ScamReport; source: 'supabase' | 'fallback'; error?: string }> {
   try {
     const res = await fetch('/api/reports', {
       method: 'POST',
@@ -63,8 +63,14 @@ export async function submitNewReport(
     if (res.ok) {
       return (await res.json()) as { report: ScamReport; source: 'supabase' | 'fallback' };
     }
-  } catch {
-    // Fall back to localStorage below
+    const err = (await res.json()) as { error?: string };
+    if (res.status === 403) {
+      throw new Error(err.error || 'Tài khoản bị khóa gửi báo cáo.');
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('khóa')) {
+      throw e;
+    }
   }
 
   const all = readLocalQueue();
@@ -84,26 +90,20 @@ export async function submitNewReport(
 
 export async function moderateReportStatus(
   id: string,
-  status: Exclude<ReportStatus, 'pending'>,
-  pin?: string
-): Promise<{ ok: boolean; source: 'supabase' | 'fallback' }> {
+  status: Exclude<ReportStatus, 'pending'>
+): Promise<{ ok: boolean; error?: string; source: 'supabase' | 'fallback' }> {
   try {
     const res = await fetch(`/api/reports/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, pin }),
+      body: JSON.stringify({ status }),
     });
     if (res.ok) {
       return { ok: true, source: 'supabase' };
     }
-    if (res.status === 401 || res.status === 403) {
-      return { ok: false, source: 'supabase' };
-    }
+    const err = (await res.json()) as { error?: string };
+    return { ok: false, error: err.error || 'Không có quyền duyệt.', source: 'supabase' };
   } catch {
-    // Fall back to localStorage below
+    return { ok: false, error: 'Lỗi mạng khi gọi API duyệt.', source: 'fallback' };
   }
-
-  const updated = readLocalQueue().map((item) => (item.id === id ? { ...item, status } : item));
-  writeLocalQueue(updated);
-  return { ok: true, source: 'fallback' };
 }
