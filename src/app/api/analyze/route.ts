@@ -200,8 +200,9 @@ export async function POST(request: Request) {
       });
     }
 
+    const model = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

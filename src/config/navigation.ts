@@ -10,17 +10,17 @@ export const BOTTOM_NAV_TABS: NavTabItem[] = [
 
 export const SCREEN_TITLES: Record<ScreenId, string> = {
   M01: 'Trang chủ & Kiểm tra nhanh',
-  M02: 'Kết quả phân tích Hybrid AI',
+  M02: 'Kết quả kiểm tra an toàn',
   M03: 'Hỏi người thân xác minh',
   M04: 'Báo cáo & Kênh Công an',
   M05: 'Video cảnh báo 1 phút',
   M06: 'Học tập & Mini Game',
-  M07: 'Radar Đội tình nguyện',
+  M07: 'Radar Cộng đồng Đồng Nai',
   M08: 'Trạng thái Hệ thống & An toàn',
-  M09: 'Tài khoản & Phân quyền',
+  M09: 'Cài đặt & Tài khoản',
 };
 
-export const SCREEN_TAB_MAP: Record<ScreenId, NavTabItem['id']> = {
+export const SCREEN_TAB_MAP: Record<ScreenId, NavTabItem['id'] | null> = {
   M01: 'M01',
   M02: 'M02',
   M03: 'M02',
@@ -28,6 +28,6 @@ export const SCREEN_TAB_MAP: Record<ScreenId, NavTabItem['id']> = {
   M05: 'M05',
   M06: 'M06',
   M07: 'M07',
-  M08: 'M01',
-  M09: 'M01',
+  M08: null,
+  M09: null,
 };

@@ -1,5 +1,7 @@
 export type ScreenId = 'M01' | 'M02' | 'M03' | 'M04' | 'M05' | 'M06' | 'M07' | 'M08' | 'M09';
 
+export type UiMode = 'simple' | 'tech';
+
 export type RiskLevel = 'danger' | 'warn' | 'unknown' | 'safe';
 
 export type UserRole = 'user' | 'admin';
@@ -85,6 +87,7 @@ export interface FamilyAlertItem {
   id: string;
   senderId?: string | null;
   senderName: string;
+  senderPhone?: string;
   targetPhone: string;
   riskLevel: RiskLevel;
   snippet: string;

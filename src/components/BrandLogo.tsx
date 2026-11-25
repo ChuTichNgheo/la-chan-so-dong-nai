@@ -4,21 +4,20 @@ interface BrandLogoProps {
   compact?: boolean;
 }
 
-/**
- * Plug-in logo component: drop final logo into public/assets/ and swap here.
- */
 export function BrandLogo({ compact = false }: BrandLogoProps) {
   return (
-    <div className="flex items-center gap-2.5">
-      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#E9FAF5] text-[#0D685E] ring-1 ring-[#CBE4DC]">
-        <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+    <div className="flex min-w-0 items-center gap-2">
+      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[#E9FAF5] text-[#0D685E] ring-1 ring-[#CBE4DC] sm:h-9 sm:w-9">
+        <ShieldCheck className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true" />
       </div>
       {!compact && (
-        <div className="leading-tight">
-          <div className="font-[family-name:var(--font-lexend)] text-sm font-extrabold text-[#0D685E]">
+        <div className="min-w-0 leading-tight">
+          <div className="truncate whitespace-nowrap font-[family-name:var(--font-lexend)] text-xs font-extrabold text-[#0D685E] sm:text-sm">
             INFINITY AI
           </div>
-          <div className="text-[11px] font-medium text-[#475569]">Lá Chắn Số Đồng Nai</div>
+          <div className="truncate whitespace-nowrap text-[10px] font-medium text-[#475569] sm:text-[11px]">
+            Lá Chắn Số Đồng Nai
+          </div>
         </div>
       )}
     </div>

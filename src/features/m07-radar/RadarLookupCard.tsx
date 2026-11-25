@@ -17,12 +17,17 @@ interface LookupResponse {
 export function RadarLookupCard() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [lookupError, setLookupError] = useState('');
   const [result, setResult] = useState<LookupResponse | null>(null);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = query.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setLookupError('Vui lòng nhập SĐT, STK hoặc đường link cần tra cứu.');
+      return;
+    }
+    setLookupError('');
     setLoading(true);
     try {
       const res = await fetch(`/api/reports/lookup?q=${encodeURIComponent(trimmed)}`, {
@@ -36,8 +41,7 @@ export function RadarLookupCard() {
     }
   }
 
-  const totalHits =
-    (result?.matches.length ?? 0) + (result?.dynamicRules.length ?? 0);
+  const totalHits = (result?.matches.length ?? 0) + (result?.dynamicRules.length ?? 0);
   const urlDanger = result?.urlReports.some((u) => u.risk === 'danger');
 
   return (
@@ -54,11 +58,14 @@ export function RadarLookupCard() {
       <form onSubmit={handleSearch} className="flex gap-2">
         <input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Nhập SĐT, STK, tên miền (VD: 0898111412)..."
+          onChange={(e) => {
+            setQuery(e.target.value);
+            if (lookupError) setLookupError('');
+          }}
+          placeholder="Nhập SĐT, STK hoặc link..."
           data-screen="M07"
           data-ui="input-radar-lookup"
-          className="flex-1 rounded-2xl bg-[#F4FBF8] px-3.5 py-2.5 text-xs font-medium text-[#0F172A] outline-none focus:ring-2 focus:ring-[#0D685E]"
+          className="min-w-0 flex-1 rounded-2xl bg-[#F4FBF8] px-3.5 py-2.5 text-xs font-medium text-[#0F172A] outline-none focus:ring-2 focus:ring-[#0D685E]"
         />
         <button
           type="submit"
@@ -71,6 +78,8 @@ export function RadarLookupCard() {
           {loading ? 'Đang tìm...' : 'Tra cứu'}
         </button>
       </form>
+
+      {lookupError && <p className="text-[11px] font-bold text-[#B91C1C]">{lookupError}</p>}
 
       {result && (
         <div className="space-y-2 text-xs">

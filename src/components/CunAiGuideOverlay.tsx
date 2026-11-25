@@ -49,8 +49,8 @@ export function CunAiGuideOverlay({ active, step, onStop }: CunAiGuideOverlayPro
         return;
       }
       const rect = target.getBoundingClientRect();
-      const x = Math.min(Math.max(12, rect.right - 22), window.innerWidth - 64);
-      const y = Math.min(Math.max(58, rect.bottom - 18), window.innerHeight - 110);
+      const x = Math.min(Math.max(12, rect.right - 36), window.innerWidth - 110);
+      const y = Math.min(Math.max(92, rect.bottom + 4), window.innerHeight - 108);
       setPetPos({ x, y });
     }
 
@@ -72,8 +72,8 @@ export function CunAiGuideOverlay({ active, step, onStop }: CunAiGuideOverlayPro
   return (
     <div className="pointer-events-none fixed inset-0 z-50">
       <div className="pointer-events-auto mx-auto mt-2 flex w-fit max-w-[92vw] items-center gap-2 rounded-full border border-[#F59E0B] bg-[#0F172A]/95 px-3 py-1.5 text-xs text-white shadow-xl">
-        <span className="h-2 w-2 animate-ping rounded-full bg-[#F59E0B]" />
-        <span className="font-semibold">{step.caption}</span>
+        <span className="h-2 w-2 shrink-0 animate-ping rounded-full bg-[#F59E0B]" />
+        <span className="font-semibold leading-snug">{step.caption}</span>
         <button
           type="button"
           onClick={onStop}

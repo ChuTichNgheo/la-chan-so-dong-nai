@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 import { CunAiSvg } from '@/components/CunAiMascot';
 import { compressImageToBase64 } from '@/lib/image-compress';
-import type { ScreenId } from '@/types';
+import { maskSensitiveTarget } from '@/lib/privacy';
+import type { RadarStats, ScreenId, UiMode } from '@/types';
 import { ElderlyMode } from './ElderlyMode';
 
 interface SpeechRecognitionAlternativeLike {
@@ -30,11 +31,16 @@ interface SpeechRecognitionLike {
   onerror: (() => void) | null;
   onend: (() => void) | null;
   start: () => void;
+  stop: () => void;
 }
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
 interface HomeScreenProps {
   seniorMode: boolean;
+  uiMode: UiMode;
+  trustedName: string;
+  trustedPhone: string;
+  radarStats: RadarStats;
   onNavigate: (screen: ScreenId) => void;
   onAnalyze: (text: string) => void;
   onAnalyzeImage: (base64: string, mimeType: string, label: string) => void;
@@ -59,6 +65,10 @@ const QUICK_SAMPLES = [
 
 export function HomeScreen({
   seniorMode,
+  uiMode,
+  trustedName,
+  trustedPhone,
+  radarStats,
   onNavigate,
   onAnalyze,
   onAnalyzeImage,
@@ -68,15 +78,24 @@ export function HomeScreen({
   const [inputText, setInputText] = useState('');
   const [listening, setListening] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   if (seniorMode) {
     return (
       <ElderlyMode
+        trustedName={trustedName}
+        trustedPhone={trustedPhone}
         onNavigate={onNavigate}
         onSpeakWithCun={onSpeakWithCun}
         onAnalyzeText={onAnalyze}
       />
     );
+  }
+
+  function adjustTextareaHeight(el: HTMLTextAreaElement) {
+    el.style.height = '38px';
+    el.style.height = `${Math.min(el.scrollHeight, 96)}px`;
   }
 
   async function handlePasteAndAnalyze() {
@@ -95,6 +114,19 @@ export function HomeScreen({
 
   function handleVoiceInput() {
     if (typeof window === 'undefined') return;
+
+    if (listening) {
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        // Ignore stop error
+      }
+      recognitionRef.current = null;
+      setListening(false);
+      onNotify('Đã dừng thu âm.');
+      return;
+    }
+
     const win = window as unknown as {
       SpeechRecognition?: SpeechRecognitionCtor;
       webkitSpeechRecognition?: SpeechRecognitionCtor;
@@ -112,19 +144,25 @@ export function HomeScreen({
       recognition.lang = 'vi-VN';
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
+      recognitionRef.current = recognition;
       setListening(true);
-      onNotify('Đang lắng nghe tiếng Việt...');
+      onNotify('Đang lắng nghe tiếng Việt (bấm lại Micro để dừng)...');
       recognition.onresult = (event) => {
         const spoken = event.results[0]?.[0]?.transcript ?? '';
         if (spoken) setInputText(spoken);
       };
       recognition.onerror = () => {
+        recognitionRef.current = null;
         setListening(false);
         onNotify('Không thu được âm thanh từ Micro.');
       };
-      recognition.onend = () => setListening(false);
+      recognition.onend = () => {
+        recognitionRef.current = null;
+        setListening(false);
+      };
       recognition.start();
     } catch {
+      recognitionRef.current = null;
       setListening(false);
     }
   }
@@ -134,7 +172,7 @@ export function HomeScreen({
     e.target.value = '';
     if (!file) return;
     try {
-      onNotify('Đang nén ảnh & gửi Gemini Vision đọc tin nhắn...');
+      onNotify('Đang nén ảnh & đọc nội dung tin nhắn...');
       const { base64, mimeType } = await compressImageToBase64(file);
       onAnalyzeImage(base64, mimeType, `Ảnh chụp: ${file.name}`);
     } catch {
@@ -142,23 +180,24 @@ export function HomeScreen({
     }
   }
 
+  const shortContact = trustedName.split('(')[0].trim() || 'Người thân';
+
   return (
     <section className="space-y-4" data-screen="M01">
-      {/* Vòng 1 Signature Emerald Agentic Hero Card */}
       <div className="relative overflow-hidden rounded-[24px] border border-white/20 bg-gradient-to-br from-[#07463F] via-[#0D685E] to-[#0F7B6F] p-4 text-white shadow-[0_14px_32px_rgba(13,104,94,0.24)]">
         <div className="pointer-events-none absolute -top-14 -right-11 h-44 w-44 rounded-full bg-[radial-gradient(circle,rgba(245,158,11,0.28)_0%,transparent_70%)]" />
 
         <div className="relative z-10 flex items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/15 px-2.5 py-1 text-[11px] font-bold text-[#E6FFF8] backdrop-blur">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-[#34D399]" />
-            Lá chắn AI đang bảo vệ • Đồng Nai
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-white/20 bg-white/15 px-2.5 py-1 text-[10px] font-bold text-[#E6FFF8] backdrop-blur sm:text-[11px]">
+            <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-[#34D399]" />
+            Lá chắn AI bảo vệ • Đồng Nai
           </span>
           <button
             type="button"
             onClick={onSpeakWithCun}
             data-screen="M01"
             data-ui="btn-hero-call-cun"
-            className="rounded-full border border-[#FCD34D] bg-[#F59E0B]/25 px-2.5 py-1 text-[10.5px] font-bold text-white transition hover:bg-[#F59E0B]/40"
+            className="shrink-0 whitespace-nowrap rounded-full border border-[#FCD34D] bg-[#F59E0B]/25 px-2.5 py-1 text-[10.5px] font-bold text-white transition hover:bg-[#F59E0B]/40"
           >
             Gọi Cún AI
           </button>
@@ -178,7 +217,9 @@ export function HomeScreen({
               Dán tin lạ hoặc nói với Cún AI
             </h1>
             <p className="mt-0.5 text-xs leading-snug text-[#C7F3E8]">
-              Kiểm tra SĐT, đường link, STK &amp; bẫy tâm lý trong 3 giây
+              {uiMode === 'tech'
+                ? 'Hybrid 2 tầng: Luật tất định + Giải mã URL + Gemini 3 Flash'
+                : 'Kiểm tra SĐT, đường link, STK & bẫy lừa đảo trong 3 giây'}
             </p>
           </div>
         </div>
@@ -191,19 +232,26 @@ export function HomeScreen({
           className="hidden"
         />
 
-        {/* Spotlight 2026 Command Pill */}
+        {/* Spotlight Command Pill */}
         <div className="relative z-10 mt-3 flex items-center gap-1 rounded-2xl bg-white/97 p-1.5 pl-3 text-[#0F172A] shadow-[0_8px_22px_rgba(4,38,34,0.26)]">
           <textarea
+            ref={textareaRef}
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
+            onChange={(e) => {
+              setInputText(e.target.value);
+              adjustTextareaHeight(e.target);
+            }}
             rows={1}
             placeholder="Dán tin, SĐT, link, STK..."
-            className="h-9 flex-1 resize-none bg-transparent py-2 text-[13.5px] font-medium text-[#0F172A] outline-none placeholder:text-[#64748B]"
+            className="min-h-[38px] flex-1 resize-none overflow-hidden bg-transparent py-2 text-[13px] font-medium leading-5 text-[#0F172A] outline-none placeholder:text-[#64748B]"
           />
           {inputText && (
             <button
               type="button"
-              onClick={() => setInputText('')}
+              onClick={() => {
+                setInputText('');
+                if (textareaRef.current) textareaRef.current.style.height = '38px';
+              }}
               aria-label="Xóa nội dung"
               className="rounded-full p-1 text-[#64748B] hover:bg-slate-100"
             >
@@ -226,8 +274,8 @@ export function HomeScreen({
             onClick={handleVoiceInput}
             data-screen="M01"
             data-ui="btn-voice-mic"
-            title="Nói tiếng Việt"
-            aria-label="Nhập bằng giọng nói"
+            title={listening ? 'Bấm để dừng thu âm' : 'Nói tiếng Việt'}
+            aria-label={listening ? 'Dừng thu âm' : 'Nhập bằng giọng nói'}
             className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl transition ${
               listening
                 ? 'bg-[#B91C1C] text-white'
@@ -259,8 +307,8 @@ export function HomeScreen({
           </button>
         </div>
 
-        {/* 1-row Horizontal Glass Test Chips */}
-        <div className="no-scrollbar relative z-10 mt-2.5 flex gap-1.5 overflow-x-auto pb-0.5">
+        {/* Wrapped Sample Chips — zero horizontal clipping on 375px */}
+        <div className="relative z-10 mt-2.5 flex flex-wrap gap-1.5">
           {QUICK_SAMPLES.map((sample) => (
             <button
               key={sample.id}
@@ -271,7 +319,7 @@ export function HomeScreen({
               }}
               data-screen="M01"
               data-ui={`chip-sample-${sample.id}`}
-              className="shrink-0 rounded-full border border-white/20 bg-white/15 px-3 py-1 text-[11px] font-bold text-white backdrop-blur transition hover:bg-white/25"
+              className="rounded-full border border-white/20 bg-white/15 px-3 py-1 text-[11px] font-bold text-white backdrop-blur transition hover:bg-white/25"
             >
               {sample.label}
             </button>
@@ -279,7 +327,7 @@ export function HomeScreen({
         </div>
       </div>
 
-      {/* Vòng 1 Asymmetric Bento Row: Emergency Family Shield + Live Radar KPI */}
+      {/* Bento Row synced dynamically with real family contact & real Radar stats */}
       <div className="grid grid-cols-2 gap-3">
         <button
           type="button"
@@ -297,7 +345,7 @@ export function HomeScreen({
               Hỏi người thân
             </div>
             <div className="tabular-nums mt-0.5 text-[11px] font-bold text-[#78350F]">
-              Chị Lan • 0912 *** 678
+              {shortContact} • {maskSensitiveTarget(trustedPhone)}
             </div>
           </div>
           <span className="mt-3 inline-flex w-fit rounded-full bg-[#0F172A] px-2.5 py-1 text-[11px] font-extrabold text-white">
@@ -317,22 +365,24 @@ export function HomeScreen({
               Radar Đồng Nai
             </span>
             <div className="tabular-nums mt-1 font-[family-name:var(--font-lexend)] text-[28px] font-extrabold leading-none text-[#0D685E]">
-              120
+              {radarStats.totalReports}
             </div>
-            <div className="mt-1 text-[11px] font-semibold text-[#475569]">báo cáo tháng 11</div>
+            <div className="mt-1 text-[11px] font-semibold text-[#475569]">báo cáo đã xác minh</div>
           </div>
           <div className="mt-2.5">
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-              <div className="h-full w-[35%] rounded-full bg-[#B91C1C]" />
+              <div
+                className="h-full rounded-full bg-[#B91C1C]"
+                style={{ width: `${Math.min(100, Math.max(5, radarStats.fakeLinkPercent))}%` }}
+              />
             </div>
             <div className="tabular-nums mt-1 text-[11px] font-extrabold text-[#991B1B]">
-              35% link giả mạo
+              {radarStats.fakeLinkPercent}% link giả mạo
             </div>
           </div>
         </button>
       </div>
 
-      {/* Compact Quick Report Strip (clean access to M04 without cluttering Header) */}
       <button
         type="button"
         onClick={() => onNavigate('M04')}

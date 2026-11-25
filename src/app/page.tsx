@@ -6,14 +6,16 @@ import { CunAiGuideOverlay, type CunGuideStep } from '@/components/CunAiGuideOve
 import { CunAiSheet, type CunFlowId } from '@/components/CunAiSheet';
 import { MobileShell } from '@/components/MobileShell';
 import { runLayerOneRules } from '@/data/local-rules';
+import { INITIAL_RADAR_STATS } from '@/data/mock-radar';
 import { HomeScreen } from '@/features/m01-home/HomeScreen';
 import { ScannerScreen } from '@/features/m02-scanner/ScannerScreen';
 import { analyzeContentHybrid } from '@/lib/hybrid-scanner';
+import { fetchRadarReports } from '@/lib/report-store';
 import { speakAlertVietnamese, stopVietnameseSpeech } from '@/lib/speech';
-import type { AnalyzeResult, AppUserProfile, RiskLevel, ScreenId } from '@/types';
+import type { AnalyzeResult, AppUserProfile, RadarStats, RiskLevel, ScreenId, UiMode } from '@/types';
 
 const ScreenFallback = () => (
-  <div className="rounded-2xl border border-[#CBE4DC] bg-white p-4 text-xs text-[#475569]">
+  <div className="rounded-2xl bg-white p-4 text-xs text-[#475569] shadow-sm">
     Đang tải màn hình...
   </div>
 );
@@ -55,10 +57,14 @@ const PRESET_INPUTS: Record<RiskLevel, string> = {
   safe: 'https://canhbao.ncsc.gov.vn',
 };
 
+const UI_MODE_STORAGE_KEY = 'lacd_ui_mode_v1';
+const CONTACT_STORAGE_KEY = 'lacd_family_contact_v1';
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default function HomePage() {
   const [activeScreen, setActiveScreen] = useState<ScreenId>('M01');
+  const [uiMode, setUiMode] = useState<UiMode>('simple');
   const [seniorMode, setSeniorMode] = useState(false);
   const [offlineMode, setOfflineMode] = useState(false);
   const [wideRadar, setWideRadar] = useState(false);
@@ -67,6 +73,11 @@ export default function HomePage() {
   const [scannedText, setScannedText] = useState('');
   const [scanResult, setScanResult] = useState<AnalyzeResult | null>(null);
   const [currentUser, setCurrentUser] = useState<AppUserProfile | null>(null);
+  const [radarStats, setRadarStats] = useState<RadarStats>(INITIAL_RADAR_STATS);
+  const [localContact, setLocalContact] = useState({
+    name: 'Chị Lan (Con gái)',
+    phone: '0912345678',
+  });
   const [cunOpen, setCunOpen] = useState(false);
   const [guideStep, setGuideStep] = useState<CunGuideStep | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -74,12 +85,36 @@ export default function HomePage() {
 
   useEffect(() => {
     let active = true;
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      try {
+        const savedMode = window.localStorage.getItem(UI_MODE_STORAGE_KEY);
+        if (savedMode === 'tech' || savedMode === 'simple') setUiMode(savedMode);
+        const savedContact = window.localStorage.getItem(CONTACT_STORAGE_KEY);
+        if (savedContact) {
+          const parsed = JSON.parse(savedContact) as { name?: string; phone?: string };
+          if (parsed.name && parsed.phone) {
+            setLocalContact({ name: parsed.name, phone: parsed.phone });
+          }
+        }
+      } catch {
+        // Ignore storage error
+      }
+    });
+
     void fetch('/api/auth/me', { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { user?: AppUserProfile | null } | null) => {
         if (active && data?.user) setCurrentUser(data.user);
       })
       .catch(() => {});
+
+    void fetchRadarReports()
+      .then((data) => {
+        if (active) setRadarStats(data.stats);
+      })
+      .catch(() => {});
+
     return () => {
       active = false;
     };
@@ -90,6 +125,26 @@ export default function HomePage() {
     setTimeout(() => {
       setToastMsg((curr) => (curr === msg ? null : curr));
     }, 4000);
+  }
+
+  function handleChangeUiMode(nextMode: UiMode) {
+    setUiMode(nextMode);
+    try {
+      window.localStorage.setItem(UI_MODE_STORAGE_KEY, nextMode);
+    } catch {
+      // Ignore
+    }
+    notify(
+      nextMode === 'tech'
+        ? 'Đã chuyển sang Chế độ Công nghệ (hiện thông số phân tích sâu).'
+        : 'Đã chuyển sang Chế độ Đơn giản mặc định.'
+    );
+  }
+
+  function navigateTo(nextScreen: ScreenId) {
+    stopGuide();
+    setToastMsg(null);
+    setActiveScreen(nextScreen);
   }
 
   function stopGuide() {
@@ -104,6 +159,7 @@ export default function HomePage() {
       notify('Bạn chưa nhập nội dung! Hãy dán tin nhắn, SĐT hoặc chọn 1 mẫu thử.');
       return;
     }
+    setToastMsg(null);
     setScannedText(trimmed);
     setActiveScreen('M02');
     setAnalyzing(true);
@@ -114,6 +170,7 @@ export default function HomePage() {
   }
 
   async function handleAnalyzeImage(base64: string, mimeType: string, label: string) {
+    setToastMsg(null);
     setScannedText(label);
     setActiveScreen('M02');
     setAnalyzing(true);
@@ -135,6 +192,7 @@ export default function HomePage() {
     const isAlive = () => flowTokenRef.current === token;
 
     setSeniorMode(false);
+    setToastMsg(null);
     setActiveScreen('M01');
     setGuideStep({ targetUi: 'chip-sample-police', caption: 'Cún chọn mẫu giả Công an...', phase: 'aim' });
     await sleep(650);
@@ -156,12 +214,13 @@ export default function HomePage() {
     if (!isAlive()) return;
 
     setActiveScreen('M03');
-    setGuideStep({ targetUi: 'btn-confirm-send-family', caption: 'Cún dừng tại đây — Bác tự bấm gửi Chị Lan nhé!', phase: 'stop', mood: 'idle' });
+    setGuideStep({ targetUi: 'btn-confirm-send-family', caption: 'Cún dừng tại đây — Bác tự bấm gửi người thân nhé!', phase: 'stop', mood: 'idle' });
   }
 
   async function handleRunCunFlow(flow: CunFlowId) {
     const token = ++flowTokenRef.current;
     const isAlive = () => flowTokenRef.current === token;
+    setToastMsg(null);
 
     if (flow === 'police-family') {
       void runAnimatedPoliceFamilyFlow();
@@ -188,18 +247,19 @@ export default function HomePage() {
     setGuideStep({ targetUi: 'btn-zalo-export', caption: 'Bấm Xuất Zalo để tạo thẻ ảnh cảnh báo khu phố!', phase: 'stop' });
   }
 
+  const trustedName = currentUser?.trustedName ?? localContact.name;
+  const trustedPhone = currentUser?.trustedPhone ?? localContact.phone;
+
   return (
     <MobileShell
       activeScreen={activeScreen}
       seniorMode={seniorMode}
       offlineMode={offlineMode}
       wideRadar={wideRadar}
+      uiMode={uiMode}
       currentUser={currentUser}
       toastMessage={toastMsg}
-      onNavigate={(s) => {
-        stopGuide();
-        setActiveScreen(s);
-      }}
+      onNavigate={navigateTo}
       onToggleSenior={() => {
         setSeniorMode((prev) => {
           const next = !prev;
@@ -215,7 +275,11 @@ export default function HomePage() {
       {activeScreen === 'M01' && (
         <HomeScreen
           seniorMode={seniorMode}
-          onNavigate={setActiveScreen}
+          uiMode={uiMode}
+          trustedName={trustedName}
+          trustedPhone={trustedPhone}
+          radarStats={radarStats}
+          onNavigate={navigateTo}
           onAnalyze={(t) => void handleAnalyze(t)}
           onAnalyzeImage={(b64, mime, lbl) => void handleAnalyzeImage(b64, mime, lbl)}
           onNotify={notify}
@@ -227,7 +291,8 @@ export default function HomePage() {
           scannedText={scannedText}
           result={scanResult}
           loading={analyzing}
-          onNavigate={setActiveScreen}
+          uiMode={uiMode}
+          onNavigate={navigateTo}
           onPreviewPreset={handlePreviewPreset}
         />
       )}
@@ -236,14 +301,29 @@ export default function HomePage() {
           scannedText={scannedText}
           scanResult={scanResult}
           currentUser={currentUser}
+          onContactLocalSaved={(name, phone) => setLocalContact({ name, phone })}
           onUserUpdated={setCurrentUser}
-          onNavigate={setActiveScreen}
+          onNavigate={navigateTo}
           onNotify={notify}
         />
       )}
-      {activeScreen === 'M04' && <ReportScreen scannedText={scannedText} onNotify={notify} />}
+      {activeScreen === 'M04' && (
+        <ReportScreen
+          key={scannedText || 'empty'}
+          scannedText={scannedText}
+          onNotify={notify}
+          onReportSubmitted={() => {
+            void fetchRadarReports().then((d) => setRadarStats(d.stats)).catch(() => {});
+          }}
+        />
+      )}
       {activeScreen === 'M05' && (
-        <VideosScreen key={videoStartIdx} initialIndex={videoStartIdx} onNavigate={setActiveScreen} onNotify={notify} />
+        <VideosScreen
+          key={videoStartIdx}
+          initialIndex={videoStartIdx}
+          onNavigate={navigateTo}
+          onNotify={notify}
+        />
       )}
       {activeScreen === 'M06' && (
         <LearningScreen
@@ -251,7 +331,7 @@ export default function HomePage() {
           onUserUpdated={setCurrentUser}
           onOpenVideoAt={(idx) => {
             setVideoStartIdx(idx);
-            setActiveScreen('M05');
+            navigateTo('M05');
           }}
           onNotify={notify}
         />
@@ -259,10 +339,12 @@ export default function HomePage() {
       {activeScreen === 'M07' && (
         <RadarScreen
           wideRadar={wideRadar}
+          uiMode={uiMode}
           currentUser={currentUser}
           onToggleWide={() => setWideRadar((prev) => !prev)}
-          onNavigate={setActiveScreen}
+          onNavigate={navigateTo}
           onNotify={notify}
+          onStatsSynced={setRadarStats}
         />
       )}
       {activeScreen === 'M08' && (
@@ -271,7 +353,7 @@ export default function HomePage() {
           onToggleOffline={() => {
             setOfflineMode((prev) => {
               const next = !prev;
-              notify(next ? 'Đang giả lập mất mạng: dùng Tầng 1 Luật tất định' : 'Đã khôi phục kết nối Hybrid AI');
+              notify(next ? 'Đang giả lập mất mạng: dùng Luật an toàn trên máy' : 'Đã khôi phục kết nối AI trực tuyến');
               return next;
             });
           }}
@@ -281,17 +363,22 @@ export default function HomePage() {
       {activeScreen === 'M09' && (
         <AccountScreen
           currentUser={currentUser}
+          uiMode={uiMode}
+          seniorMode={seniorMode}
+          onChangeUiMode={handleChangeUiMode}
+          onToggleSenior={() => setSeniorMode((p) => !p)}
           onAuthChanged={setCurrentUser}
-          onNavigate={setActiveScreen}
+          onNavigate={navigateTo}
           onNotify={notify}
         />
       )}
       <CunAiSheet
         open={cunOpen}
         offlineMode={offlineMode}
+        uiMode={uiMode}
         onClose={() => setCunOpen(false)}
         onRunFlow={(flow) => void handleRunCunFlow(flow)}
-        onNavigate={setActiveScreen}
+        onNavigate={navigateTo}
         onAnalyzeText={(t) => void handleAnalyze(t)}
       />
       <CunAiGuideOverlay active={Boolean(guideStep)} step={guideStep} onStop={stopGuide} />

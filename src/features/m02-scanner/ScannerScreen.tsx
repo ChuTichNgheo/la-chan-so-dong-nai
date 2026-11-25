@@ -5,23 +5,31 @@ import { CheckCircle2, Flag, Globe, Loader2, PhoneCall, ShieldAlert, Square, Vol
 import { AlertBadge } from '@/components/AlertBadge';
 import { RISK_LEVEL_META } from '@/config/theme';
 import { speakAlertVietnamese, stopVietnameseSpeech } from '@/lib/speech';
-import type { AnalyzeResult, RiskLevel, ScreenId } from '@/types';
+import type { AnalyzeResult, RiskLevel, ScreenId, UiMode } from '@/types';
 
 interface ScannerScreenProps {
   scannedText: string;
   result: AnalyzeResult | null;
   loading: boolean;
+  uiMode: UiMode;
   onNavigate: (screen: ScreenId) => void;
   onPreviewPreset: (level: RiskLevel) => void;
 }
 
 const SOURCE_LABELS: Record<AnalyzeResult['source'], string> = {
-  hybrid: 'Hybrid: Luật + Gemini AI',
+  hybrid: 'Hybrid: Luật + Gemini 3 AI',
   db: 'Cơ sở dữ liệu Đồng Nai',
-  offline: 'Ngoại tuyến: Tầng 1 Luật tất định',
+  offline: 'Ngoại tuyến: Luật trên máy',
 };
 
-function renderHighlightedSnippet(text: string, highlights: string[]) {
+const HIGHLIGHT_CLASSES: Record<RiskLevel, string> = {
+  danger: 'rounded bg-[#FECACA] px-1 font-extrabold text-[#991B1B]',
+  warn: 'rounded bg-[#FEF3C7] px-1 font-extrabold text-[#92400E]',
+  unknown: 'rounded bg-[#E2E8F0] px-1 font-bold text-[#0F172A]',
+  safe: 'rounded bg-[#D1FAE5] px-1 font-extrabold text-[#065F46]',
+};
+
+function renderHighlightedSnippet(text: string, highlights: string[], level: RiskLevel) {
   if (!text) return null;
   const cleanTerms = highlights.map((t) => t.trim()).filter(Boolean);
   if (cleanTerms.length === 0) return <span>{text}</span>;
@@ -29,13 +37,14 @@ function renderHighlightedSnippet(text: string, highlights: string[]) {
   const escaped = cleanTerms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   const regex = new RegExp(`(${escaped.join('|')})`, 'gi');
   const parts = text.split(regex);
+  const markClass = HIGHLIGHT_CLASSES[level];
 
   return (
     <>
       {parts.map((part, i) => {
         const isHit = cleanTerms.some((term) => term.toLowerCase() === part.toLowerCase());
         return isHit ? (
-          <mark key={i} className="rounded bg-[#FECACA] px-1 font-extrabold text-[#991B1B]">
+          <mark key={i} className={markClass}>
             {part}
           </mark>
         ) : (
@@ -50,6 +59,7 @@ export function ScannerScreen({
   scannedText,
   result,
   loading,
+  uiMode,
   onNavigate,
   onPreviewPreset,
 }: ScannerScreenProps) {
@@ -68,34 +78,30 @@ export function ScannerScreen({
 
   if (loading) {
     return (
-      <section className="space-y-3 rounded-3xl bg-white p-5 shadow-[0_8px_28px_rgba(13,104,94,0.08)]" data-screen="M02">
+      <section
+        className="space-y-3 rounded-3xl bg-white p-5 shadow-[0_8px_28px_rgba(13,104,94,0.08)]"
+        data-screen="M02"
+      >
         <div className="flex items-center gap-2.5">
           <span className="grid h-9 w-9 place-items-center rounded-2xl bg-[#E9FAF5] text-[#0D685E]">
             <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
           </span>
           <div>
             <h1 className="font-[family-name:var(--font-lexend)] text-base font-extrabold text-[#0F172A]">
-              Đang đối chiếu 2 tầng bảo vệ
+              Đang kiểm tra mức độ an toàn
             </h1>
             <p className="text-[11px] text-[#64748B]">Vui lòng chờ 1–2 giây...</p>
           </div>
         </div>
-
         <div className="space-y-2 pt-1 text-xs">
           <div className="flex items-center gap-2 rounded-2xl bg-[#ECFDF5] p-3 font-bold text-[#065F46]">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-[#059669]" aria-hidden="true" />
-            <span>Tầng 1: Quét luật tất định &amp; DB Đồng Nai (&lt;50ms)</span>
+            <span>Bước 1: Đối chiếu danh sách cảnh báo &amp; đường link Đồng Nai</span>
           </div>
           <div className="flex items-center gap-2 rounded-2xl bg-[#F4FBF8] p-3 font-bold text-[#0D685E]">
             <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
-            <span>Tầng 2: Gemini AI đang phân tích dấu hiệu thao túng...</span>
+            <span>Bước 2: AI phân tích ngữ cảnh &amp; dấu hiệu thao túng...</span>
           </div>
-        </div>
-
-        <div className="space-y-2 pt-1">
-          <div className="h-3 w-3/4 animate-pulse rounded-full bg-slate-100" />
-          <div className="h-3 w-full animate-pulse rounded-full bg-slate-100" />
-          <div className="h-3 w-2/3 animate-pulse rounded-full bg-slate-100" />
         </div>
       </section>
     );
@@ -107,7 +113,7 @@ export function ScannerScreen({
         <div className="rounded-3xl bg-white p-5 text-center shadow-[0_6px_24px_rgba(13,104,94,0.07)]">
           <p className="text-base font-extrabold text-[#0F172A]">Chưa có nội dung kiểm tra</p>
           <p className="mt-1.5 text-xs text-[#475569]">
-            Quay lại Trang chủ hoặc chọn nhanh 1 trong 4 mức cảnh báo bên dưới để xem thử.
+            Quay lại Trang chủ để dán tin nhắn hoặc chọn nhanh 1 trong 4 tình huống mẫu bên dưới.
           </p>
           <button
             type="button"
@@ -165,7 +171,9 @@ export function ScannerScreen({
       <div className={`rounded-3xl border-2 p-4 shadow-sm ${meta.bgClass} ${meta.borderClass}`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <AlertBadge level={result.level} customLabel={result.badge} />
-          <span className="text-[11px] font-bold text-[#475569]">{SOURCE_LABELS[result.source]}</span>
+          {uiMode === 'tech' && (
+            <span className="text-[11px] font-bold text-[#475569]">{SOURCE_LABELS[result.source]}</span>
+          )}
         </div>
 
         <h1 className={`mt-3 font-[family-name:var(--font-lexend)] text-base font-extrabold ${meta.textClass}`}>
@@ -173,25 +181,25 @@ export function ScannerScreen({
         </h1>
 
         {scannedText && (
-          <div className="mt-3 rounded-2xl bg-white p-3 text-xs leading-relaxed text-[#0F172A]">
-            {renderHighlightedSnippet(scannedText, result.highlights)}
+          <div className="mt-3 rounded-2xl bg-white p-3 text-xs leading-relaxed text-[#0F172A] break-words">
+            {renderHighlightedSnippet(scannedText, result.highlights, result.level)}
           </div>
         )}
 
-        {((result.urlReports && result.urlReports.length > 0) ||
-          (typeof result.communityMatches === 'number' && result.communityMatches > 0)) && (
+        {typeof result.communityMatches === 'number' && result.communityMatches > 0 && (
+          <div className="mt-3 flex items-center gap-1.5 rounded-2xl bg-[#FEF2F2] p-3 text-xs font-bold text-[#991B1B]">
+            <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Trùng {result.communityMatches} báo cáo đã được cộng đồng Đồng Nai xác minh
+          </div>
+        )}
+
+        {uiMode === 'tech' && result.urlReports && result.urlReports.length > 0 && (
           <div className="mt-3 space-y-2 rounded-2xl bg-white/90 p-3 text-xs">
             <div className="flex items-center gap-1.5 font-extrabold text-[#0D685E]">
               <Globe className="h-3.5 w-3.5" aria-hidden="true" />
-              Kiểm tra kỹ thuật đường link &amp; cộng đồng
+              Phân tích kỹ thuật đường link (Chế độ Công nghệ)
             </div>
-            {typeof result.communityMatches === 'number' && result.communityMatches > 0 && (
-              <div className="flex items-center gap-1.5 rounded-xl bg-[#FEF2F2] px-2.5 py-1.5 font-bold text-[#991B1B]">
-                <ShieldAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                Trùng {result.communityMatches} báo cáo đã được xác minh tại Đồng Nai
-              </div>
-            )}
-            {result.urlReports?.map((u, idx) => (
+            {result.urlReports.map((u, idx) => (
               <div key={idx} className="rounded-xl bg-[#F4FBF8] p-2.5 text-[11px]">
                 <div className="font-bold text-[#0F172A] break-all">
                   Tên miền: <span className="text-[#0D685E]">{u.hostname}</span>

@@ -5,16 +5,18 @@ import { Download, RefreshCw, Share2, ShieldCheck } from 'lucide-react';
 import { INITIAL_RADAR_STATS } from '@/data/mock-radar';
 import { fetchRadarReports, moderateReportStatus } from '@/lib/report-store';
 import { renderZaloAlertCardDataUrl } from '@/lib/zalo-card-canvas';
-import type { AppUserProfile, RadarBreakdownItem, RadarStats, ScamReport, ScreenId } from '@/types';
+import type { AppUserProfile, RadarBreakdownItem, RadarStats, ScamReport, ScreenId, UiMode } from '@/types';
 import { AdminModerationPanel } from './AdminModerationPanel';
 import { RadarLookupCard } from './RadarLookupCard';
 
 interface RadarScreenProps {
   wideRadar: boolean;
+  uiMode: UiMode;
   currentUser: AppUserProfile | null;
   onToggleWide: () => void;
   onNavigate: (screen: ScreenId) => void;
   onNotify: (msg: string) => void;
+  onStatsSynced?: (stats: RadarStats) => void;
 }
 
 const TONE_CLASSES: Record<RadarBreakdownItem['tone'], string> = {
@@ -26,10 +28,12 @@ const TONE_CLASSES: Record<RadarBreakdownItem['tone'], string> = {
 
 export function RadarScreen({
   wideRadar,
+  uiMode,
   currentUser,
   onToggleWide,
   onNavigate,
   onNotify,
+  onStatsSynced,
 }: RadarScreenProps) {
   const [stats, setStats] = useState<RadarStats>(INITIAL_RADAR_STATS);
   const [queue, setQueue] = useState<ScamReport[]>([]);
@@ -45,8 +49,9 @@ export function RadarScreen({
       setQueue(data.queue);
       setRecentApproved(data.recentApproved);
       setSourceLabel(data.source);
+      onStatsSynced?.(data.stats);
     },
-    []
+    [onStatsSynced]
   );
 
   const loadData = useCallback(async () => {
@@ -82,7 +87,7 @@ export function RadarScreen({
       <div className="flex flex-wrap items-center justify-between gap-2 px-1">
         <div>
           <div className="text-[11px] font-extrabold uppercase text-[#0D685E]">
-            Radar Đồng Nai • {sourceLabel}
+            Radar Đồng Nai{uiMode === 'tech' ? ` • ${sourceLabel}` : ''}
           </div>
           <h1 className="font-[family-name:var(--font-lexend)] text-xl font-extrabold text-[#0F172A]">
             Cảnh báo Cộng đồng
@@ -228,7 +233,7 @@ export function RadarScreen({
               data-ui="btn-goto-admin-login"
               className="mt-3 rounded-2xl bg-[#0D685E] px-4 py-2.5 font-bold text-white"
             >
-              Đăng nhập Quản trị (M09)
+              Đăng nhập Quản trị (Cài đặt)
             </button>
           </div>
         )}

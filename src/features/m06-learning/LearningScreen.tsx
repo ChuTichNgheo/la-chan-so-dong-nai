@@ -1,10 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Award, Clock, MessageCircleWarning, RotateCcw, Shield, UserRoundX, Video } from 'lucide-react';
+import {
+  Award,
+  Clock,
+  MessageCircleWarning,
+  Play,
+  RotateCcw,
+  Shield,
+  UserRoundX,
+  Video,
+} from 'lucide-react';
 import { CunAiSvg } from '@/components/CunAiMascot';
 import { GAME_QUESTIONS } from '@/data/lessons-game';
-import { VIDEOS_DATA } from '@/data/videos-data';
+import { LESSONS_DATA, VIDEOS_DATA } from '@/data/videos-data';
 import type { AppUserProfile } from '@/types';
 
 interface LearningScreenProps {
@@ -21,6 +30,7 @@ export function LearningScreen({
   onNotify,
 }: LearningScreenProps) {
   const [tab, setTab] = useState<'game' | 'lessons'>('game');
+  const [started, setStarted] = useState(false);
   const [qIndex, setQIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
@@ -30,12 +40,13 @@ export function LearningScreen({
   const [chosenIdx, setChosenIdx] = useState<number | null>(null);
   const [timedOut, setTimedOut] = useState(false);
 
-  const isGameFinished = qIndex >= GAME_QUESTIONS.length || lives <= 0;
+  const outOfLives = lives <= 0;
+  const isGameFinished = qIndex >= GAME_QUESTIONS.length || outOfLives;
   const answered = chosenIdx !== null || timedOut;
   const currentQ = GAME_QUESTIONS[qIndex];
 
   useEffect(() => {
-    if (tab !== 'game' || isGameFinished || answered) return;
+    if (!started || tab !== 'game' || isGameFinished || answered) return;
     const id = setInterval(() => {
       setSecondsLeft((prev) => {
         if (prev <= 1) {
@@ -49,7 +60,7 @@ export function LearningScreen({
       });
     }, 1000);
     return () => clearInterval(id);
-  }, [tab, isGameFinished, answered, qIndex]);
+  }, [started, tab, isGameFinished, answered, qIndex]);
 
   function handleSelectOption(idx: number) {
     if (answered || !currentQ) return;
@@ -95,6 +106,7 @@ export function LearningScreen({
   }
 
   function handleResetGame() {
+    setStarted(true);
     setQIndex(0);
     setScore(0);
     setCorrectCount(0);
@@ -105,12 +117,24 @@ export function LearningScreen({
     setTimedOut(false);
   }
 
-  const badgeTitle =
-    correctCount >= 4
-      ? 'Siêu Lá Chắn Đồng Nai'
-      : correctCount >= 2
-      ? 'Thám Tử Số Tiềm Năng'
-      : 'Tân Binh Cần Ôn Video';
+  const badgeTitle = outOfLives
+    ? 'Hết 3 lá chắn — Hãy thử lại'
+    : correctCount >= 4
+    ? 'Siêu Lá Chắn Đồng Nai'
+    : correctCount >= 2
+    ? 'Thám Tử Số Tiềm Năng'
+    : 'Tân Binh Cần Ôn Video';
+
+  const headerBadge =
+    tab === 'lessons'
+      ? `${LESSONS_DATA.length} bài học 1 phút`
+      : !started
+      ? `${GAME_QUESTIONS.length} tình huống`
+      : outOfLives
+      ? 'Hết lá chắn'
+      : isGameFinished
+      ? 'Hoàn thành'
+      : `Màn ${qIndex + 1} / ${GAME_QUESTIONS.length}`;
 
   return (
     <section className="space-y-4" data-screen="M06">
@@ -119,7 +143,7 @@ export function LearningScreen({
           Học tập &amp; Bắt Bài
         </h1>
         <span className="tabular-nums rounded-full bg-[#E9FAF5] px-3 py-1 text-xs font-extrabold text-[#0D685E]">
-          {isGameFinished ? 'Hoàn thành' : `Màn ${qIndex + 1} / ${GAME_QUESTIONS.length}`}
+          {headerBadge}
         </span>
       </div>
 
@@ -150,183 +174,214 @@ export function LearningScreen({
 
       {tab === 'game' ? (
         <div className="space-y-3">
-          <div className="grid grid-cols-4 gap-1.5 rounded-3xl bg-[#0D685E] p-3 text-center text-white tabular-nums shadow-md">
-            <div>
-              <div className="text-base font-extrabold">{score}</div>
-              <div className="text-[10px] text-[#D1FAE5]">Điểm số</div>
-            </div>
-            <div>
-              <div className="text-base font-extrabold">x{streak}</div>
-              <div className="text-[10px] text-[#D1FAE5]">Chuỗi</div>
-            </div>
-            <div>
-              <div className="inline-flex items-center gap-0.5 text-base font-extrabold">
-                <Shield className="h-3.5 w-3.5 text-[#FCD34D]" aria-hidden="true" />
-                {lives}/3
-              </div>
-              <div className="text-[10px] text-[#D1FAE5]">Lá chắn</div>
-            </div>
-            <div>
-              <div
-                className={`inline-flex items-center gap-0.5 text-base font-extrabold ${
-                  secondsLeft <= 3 && !answered ? 'text-[#FCD34D]' : ''
-                }`}
-              >
-                <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                {secondsLeft}s
-              </div>
-              <div className="text-[10px] text-[#D1FAE5]">Phản xạ</div>
-            </div>
-          </div>
-
-          {isGameFinished ? (
-            <div className="space-y-3 rounded-3xl bg-white p-5 text-center shadow-[0_6px_24px_rgba(13,104,94,0.07)]">
+          {!started ? (
+            <div className="space-y-3.5 rounded-3xl bg-white p-5 text-center shadow-[0_8px_28px_rgba(13,104,94,0.08)]">
               <div className="mx-auto w-fit">
-                <CunAiSvg size={56} mood={correctCount >= 4 ? 'idle' : 'alert'} />
+                <CunAiSvg size={56} mood="idle" />
               </div>
-              <div className="inline-flex items-center gap-1 rounded-full bg-[#FFFBEB] px-3 py-1 text-xs font-extrabold text-[#92400E]">
-                <Award className="h-4 w-4" aria-hidden="true" />
-                Huy hiệu: {badgeTitle}
-              </div>
-              <div className="tabular-nums font-[family-name:var(--font-lexend)] text-2xl font-extrabold text-[#0D685E]">
-                {score} điểm ({correctCount}/{GAME_QUESTIONS.length})
-              </div>
-              <button
-                type="button"
-                onClick={() => onNotify('Đã sao chép link Mini Game thách đấu gia đình qua Zalo!')}
-                className="w-full rounded-2xl bg-[#F59E0B] py-3 text-xs font-extrabold text-[#0F172A]"
-              >
-                Thách đấu cùng Gia đình
-              </button>
+              <h2 className="font-[family-name:var(--font-lexend)] text-base font-extrabold text-[#0F172A]">
+                Thử thách phản xạ 10 giây
+              </h2>
+              <p className="text-xs leading-relaxed text-[#475569]">
+                Đọc nhanh 5 tin nhắn giả lập thực tế tại Đồng Nai. Bạn có 3 lá chắn và 10 giây
+                phản xạ mỗi tình huống để bắt bài kẻ gian.
+              </p>
               <button
                 type="button"
                 onClick={handleResetGame}
                 data-screen="M06"
-                data-ui="btn-reset-game"
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-2xl bg-[#E9FAF5] py-3 text-xs font-bold text-[#0D685E]"
+                data-ui="btn-start-game"
+                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-[#0D685E] text-sm font-extrabold text-white shadow-md"
               >
-                <RotateCcw className="h-4 w-4" aria-hidden="true" />
-                Chơi lại từ đầu
+                <Play className="h-4 w-4 fill-white" aria-hidden="true" />
+                Bắt đầu thử thách
               </button>
             </div>
           ) : (
-            /* Chat App Simulator Card */
-            <div className="overflow-hidden rounded-3xl bg-white shadow-[0_8px_28px_rgba(13,104,94,0.08)]">
-              <div className="flex items-center justify-between bg-[#F1F5F9] px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="grid h-8 w-8 place-items-center rounded-full bg-[#FEF2F2] text-[#B91C1C]">
-                    <UserRoundX className="h-4 w-4" aria-hidden="true" />
-                  </span>
-                  <div className="leading-tight">
-                    <div className="text-xs font-extrabold text-[#0F172A]">{currentQ.sender}</div>
-                    <div className="text-[10px] font-semibold text-[#64748B]">
-                      {currentQ.role} • Người lạ
+            <>
+              <div className="grid grid-cols-4 gap-1.5 rounded-3xl bg-[#0D685E] p-3 text-center text-white tabular-nums shadow-md">
+                <div>
+                  <div className="text-base font-extrabold">{score}</div>
+                  <div className="text-[10px] text-[#D1FAE5]">Điểm số</div>
+                </div>
+                <div>
+                  <div className="text-base font-extrabold">x{streak}</div>
+                  <div className="text-[10px] text-[#D1FAE5]">Chuỗi</div>
+                </div>
+                <div>
+                  <div className="inline-flex items-center gap-0.5 text-base font-extrabold">
+                    <Shield className="h-3.5 w-3.5 text-[#FCD34D]" aria-hidden="true" />
+                    {lives}/3
+                  </div>
+                  <div className="text-[10px] text-[#D1FAE5]">Lá chắn</div>
+                </div>
+                <div>
+                  <div
+                    className={`inline-flex items-center gap-0.5 text-base font-extrabold ${
+                      secondsLeft <= 3 && !answered ? 'text-[#FCD34D]' : ''
+                    }`}
+                  >
+                    <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                    {isGameFinished ? 'Xong' : `${secondsLeft}s`}
+                  </div>
+                  <div className="text-[10px] text-[#D1FAE5]">Phản xạ</div>
+                </div>
+              </div>
+
+              {isGameFinished ? (
+                <div className="space-y-3 rounded-3xl bg-white p-5 text-center shadow-[0_6px_24px_rgba(13,104,94,0.07)]">
+                  <div className="mx-auto w-fit">
+                    <CunAiSvg size={56} mood={outOfLives || correctCount < 2 ? 'alert' : 'idle'} />
+                  </div>
+                  <div
+                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-extrabold ${
+                      outOfLives ? 'bg-[#FEF2F2] text-[#991B1B]' : 'bg-[#FFFBEB] text-[#92400E]'
+                    }`}
+                  >
+                    <Award className="h-4 w-4" aria-hidden="true" />
+                    {badgeTitle}
+                  </div>
+                  <div className="tabular-nums font-[family-name:var(--font-lexend)] text-2xl font-extrabold text-[#0D685E]">
+                    {score} điểm ({correctCount}/{GAME_QUESTIONS.length})
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onNotify('Đã sao chép link Mini Game thách đấu gia đình qua Zalo!')}
+                    className="w-full rounded-2xl bg-[#F59E0B] py-3 text-xs font-extrabold text-[#0F172A]"
+                  >
+                    Thách đấu cùng Gia đình
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetGame}
+                    data-screen="M06"
+                    data-ui="btn-reset-game"
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-2xl bg-[#E9FAF5] py-3 text-xs font-bold text-[#0D685E]"
+                  >
+                    <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                    Chơi lại từ đầu
+                  </button>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-3xl bg-white shadow-[0_8px_28px_rgba(13,104,94,0.08)]">
+                  <div className="flex items-center justify-between bg-[#F1F5F9] px-4 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="grid h-8 w-8 place-items-center rounded-full bg-[#FEF2F2] text-[#B91C1C]">
+                        <UserRoundX className="h-4 w-4" aria-hidden="true" />
+                      </span>
+                      <div className="leading-tight">
+                        <div className="text-xs font-extrabold text-[#0F172A]">{currentQ.sender}</div>
+                        <div className="text-[10px] font-semibold text-[#64748B]">
+                          {currentQ.role} • Người lạ
+                        </div>
+                      </div>
                     </div>
+                    <MessageCircleWarning className="h-4 w-4 text-[#D97706]" aria-hidden="true" />
                   </div>
-                </div>
-                <MessageCircleWarning className="h-4 w-4 text-[#D97706]" aria-hidden="true" />
-              </div>
 
-              {/* Live shrinking 10s countdown bar */}
-              <div className="h-1.5 w-full bg-slate-100">
-                <div
-                  className={`h-full transition-all duration-1000 linear ${
-                    secondsLeft <= 3 ? 'bg-[#DC2626]' : 'bg-[#14B8A6]'
-                  }`}
-                  style={{ width: `${secondsLeft * 10}%` }}
-                />
-              </div>
-
-              <div className="space-y-3 p-4">
-                {/* Incoming Chat Bubble */}
-                <div className="max-w-[92%] rounded-2xl rounded-tl-xs bg-[#F4FBF8] p-3.5 text-xs leading-relaxed text-[#0F172A] shadow-xs">
-                  <p>{currentQ.message}</p>
-                  <span className="mt-1.5 block text-[10px] font-medium text-[#64748B]">
-                    Tin nhắn đến • Vừa xong
-                  </span>
-                </div>
-
-                {/* Quick-Action Response Pills */}
-                <div className="space-y-2 pt-1">
-                  <div className="text-[11px] font-extrabold uppercase tracking-wide text-[#0D685E]">
-                    Chọn phản xạ của bạn:
+                  <div className="h-1.5 w-full bg-slate-100">
+                    <div
+                      className={`h-full transition-all duration-1000 linear ${
+                        secondsLeft <= 3 ? 'bg-[#DC2626]' : 'bg-[#14B8A6]'
+                      }`}
+                      style={{ width: `${secondsLeft * 10}%` }}
+                    />
                   </div>
-                  {currentQ.options.map((opt, idx) => {
-                    const styleClass = answered
-                      ? opt.isCorrect
-                        ? 'bg-[#ECFDF5] text-[#065F46] ring-2 ring-[#059669]'
-                        : idx === chosenIdx
-                        ? 'bg-[#FEF2F2] text-[#991B1B] ring-2 ring-[#DC2626]'
-                        : 'bg-slate-50 opacity-50'
-                      : 'bg-slate-100 text-[#0F172A] hover:bg-[#E9FAF5] active:scale-[0.99]';
-                    return (
-                      <button
-                        key={idx}
-                        type="button"
-                        disabled={answered}
-                        onClick={() => handleSelectOption(idx)}
-                        data-screen="M06"
-                        data-ui={`btn-quiz-opt-${idx}`}
-                        className={`w-full rounded-2xl p-3 text-left text-xs font-bold transition ${styleClass}`}
-                      >
-                        {opt.text}
-                      </button>
-                    );
-                  })}
-                </div>
 
-                {answered && (
-                  <div className="space-y-2.5 rounded-2xl bg-[#F4FBF8] p-3.5 text-xs">
-                    <div className="font-extrabold text-[#0D685E]">
-                      {timedOut
-                        ? 'Hết 10 giây! (-1 lá chắn)'
-                        : chosenIdx !== null && currentQ.options[chosenIdx]?.isCorrect
-                        ? 'Bắt bài chính xác!'
-                        : 'Sập bẫy rồi (-1 lá chắn)'}
+                  <div className="space-y-2.5 p-3.5">
+                    <div className="max-w-[94%] rounded-2xl rounded-tl-xs bg-[#F4FBF8] p-3 text-xs leading-relaxed text-[#0F172A] shadow-xs">
+                      <p>{currentQ.message}</p>
                     </div>
-                    <p className="text-[#1E293B]">{currentQ.explanation}</p>
-                    <button
-                      type="button"
-                      onClick={handleNextQuestion}
-                      data-screen="M06"
-                      data-ui="btn-next-question"
-                      className="w-full rounded-2xl bg-[#0D685E] py-2.5 font-bold text-white"
-                    >
-                      {qIndex + 1 < GAME_QUESTIONS.length && lives > 0
-                        ? 'Qua tình huống tiếp theo →'
-                        : 'Xem tổng kết & Huy hiệu'}
-                    </button>
+
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] font-extrabold uppercase tracking-wide text-[#0D685E]">
+                        Chọn phản xạ của bạn:
+                      </div>
+                      {currentQ.options.map((opt, idx) => {
+                        const styleClass = answered
+                          ? opt.isCorrect
+                            ? 'bg-[#ECFDF5] text-[#065F46] ring-2 ring-[#059669]'
+                            : idx === chosenIdx
+                            ? 'bg-[#FEF2F2] text-[#991B1B] ring-2 ring-[#DC2626]'
+                            : 'bg-slate-50 opacity-50'
+                          : 'bg-slate-100 text-[#0F172A] hover:bg-[#E9FAF5] active:scale-[0.99]';
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            disabled={answered}
+                            onClick={() => handleSelectOption(idx)}
+                            data-screen="M06"
+                            data-ui={`btn-quiz-opt-${idx}`}
+                            className={`w-full rounded-2xl p-2.5 text-left text-xs font-bold transition ${styleClass}`}
+                          >
+                            {opt.text}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {answered && (
+                      <div className="space-y-2 rounded-2xl bg-[#F4FBF8] p-3 text-xs">
+                        <div className="font-extrabold text-[#0D685E]">
+                          {timedOut
+                            ? 'Hết 10 giây! (-1 lá chắn)'
+                            : chosenIdx !== null && currentQ.options[chosenIdx]?.isCorrect
+                            ? 'Bắt bài chính xác!'
+                            : 'Sập bẫy rồi (-1 lá chắn)'}
+                        </div>
+                        <p className="text-[#1E293B]">{currentQ.explanation}</p>
+                        <button
+                          type="button"
+                          onClick={handleNextQuestion}
+                          data-screen="M06"
+                          data-ui="btn-next-question"
+                          className="w-full rounded-2xl bg-[#0D685E] py-2.5 font-bold text-white"
+                        >
+                          {qIndex + 1 < GAME_QUESTIONS.length && lives > 0
+                            ? 'Qua tình huống tiếp theo →'
+                            : 'Xem kết quả'}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       ) : (
         <div className="space-y-2.5">
-          {VIDEOS_DATA.map((item, idx) => (
-            <div key={item.id} className="rounded-3xl bg-white p-4 text-xs shadow-[0_4px_18px_rgba(13,104,94,0.05)]">
-              <div className="flex items-center justify-between gap-2">
-                <span
-                  className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold ${
-                    item.src ? 'bg-[#FEF2F2] text-[#991B1B]' : 'bg-[#E9FAF5] text-[#0D685E]'
-                  }`}
-                >
-                  {item.src ? 'VIDEO THẬT' : 'Bài học 1p'}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onOpenVideoAt(idx)}
-                  className="inline-flex items-center gap-1 rounded-full bg-[#F4FBF8] px-3 py-1 text-[11px] font-bold text-[#0D685E]"
-                >
-                  <Video className="h-3 w-3" aria-hidden="true" />
-                  Xem ngay
-                </button>
+          {LESSONS_DATA.map((item) => {
+            const realVideoIdx = item.src
+              ? VIDEOS_DATA.findIndex((v) => v.id === item.id)
+              : -1;
+            return (
+              <div key={item.id} className="rounded-3xl bg-white p-4 text-xs shadow-[0_4px_18px_rgba(13,104,94,0.05)]">
+                <div className="flex items-center justify-between gap-2">
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-extrabold ${
+                      realVideoIdx >= 0 ? 'bg-[#FEF2F2] text-[#991B1B]' : 'bg-[#E9FAF5] text-[#0D685E]'
+                    }`}
+                  >
+                    {realVideoIdx >= 0 ? 'VIDEO THẬT' : 'Bài học 1p'}
+                  </span>
+                  {realVideoIdx >= 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenVideoAt(realVideoIdx)}
+                      className="inline-flex items-center gap-1 rounded-full bg-[#F4FBF8] px-3 py-1 text-[11px] font-bold text-[#0D685E]"
+                    >
+                      <Video className="h-3 w-3" aria-hidden="true" />
+                      Xem ngay
+                    </button>
+                  )}
+                </div>
+                <h2 className="mt-2 font-extrabold text-[#0F172A]">{item.title}</h2>
+                <p className="mt-1 text-[#475569]">{item.stepAction}</p>
               </div>
-              <h2 className="mt-2 font-extrabold text-[#0F172A]">{item.title}</h2>
-              <p className="mt-1 text-[#475569]">{item.stepAction}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>

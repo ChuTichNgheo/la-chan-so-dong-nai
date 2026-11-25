@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Eye, EyeOff, Lock, MessageSquare, PhoneCall, Send, Share2 } from 'lucide-react';
+import { isValidVietnamesePhone, normalizePhoneDigits } from '@/lib/phone';
 import { maskSensitiveTarget } from '@/lib/privacy';
 import { speakAlertVietnamese } from '@/lib/speech';
 import type { AnalyzeResult, AppUserProfile, FamilyAlertItem, ScreenId } from '@/types';
@@ -11,6 +12,7 @@ interface FamilyScreenProps {
   scannedText: string;
   scanResult: AnalyzeResult | null;
   currentUser: AppUserProfile | null;
+  onContactLocalSaved?: (name: string, phone: string) => void;
   onUserUpdated: (user: AppUserProfile) => void;
   onNavigate: (screen: ScreenId) => void;
   onNotify: (msg: string) => void;
@@ -18,11 +20,13 @@ interface FamilyScreenProps {
 
 const CONTACT_STORAGE_KEY = 'lacd_family_contact_v1';
 const ALERTS_STORAGE_KEY = 'lacd_family_alerts_v1';
+const SENDER_PHONE_KEY = 'lacd_sender_callback_phone_v1';
 
 export function FamilyScreen({
   scannedText,
   scanResult,
   currentUser,
+  onContactLocalSaved,
   onUserUpdated,
   onNavigate,
   onNotify,
@@ -32,25 +36,28 @@ export function FamilyScreen({
     currentUser?.trustedName ?? 'Chị Lan (Con gái • Ưu tiên 1)'
   );
   const [contactPhone, setContactPhone] = useState(currentUser?.trustedPhone ?? '0912345678');
+  const [draftName, setDraftName] = useState(currentUser?.trustedName ?? 'Chị Lan (Con gái • Ưu tiên 1)');
+  const [draftPhone, setDraftPhone] = useState(currentUser?.trustedPhone ?? '0912345678');
+  const [senderPhone, setSenderPhone] = useState('0908111222');
+  const [contactError, setContactError] = useState('');
   const [editing, setEditing] = useState(false);
   const [showPhone, setShowPhone] = useState(false);
   const [alerts, setAlerts] = useState<FamilyAlertItem[]>([]);
-  const [alertSource, setAlertSource] = useState<'supabase' | 'fallback'>('fallback');
+  const [sessionSentId, setSessionSentId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [sending, setSending] = useState(false);
 
   const loadAlerts = useCallback(async (phone: string) => {
     setRefreshing(true);
     try {
-      const cleanPhone = phone.replace(/\D/g, '');
+      const cleanPhone = normalizePhoneDigits(phone);
       const res = await fetch(`/api/family-alerts?phone=${encodeURIComponent(cleanPhone)}`, {
         cache: 'no-store',
       });
       if (res.ok) {
-        const data = (await res.json()) as { alerts?: FamilyAlertItem[]; source?: 'supabase' | 'fallback' };
+        const data = (await res.json()) as { alerts?: FamilyAlertItem[]; source?: string };
         if (data.source === 'supabase' && Array.isArray(data.alerts)) {
           setAlerts(data.alerts);
-          setAlertSource('supabase');
           setRefreshing(false);
           return;
         }
@@ -64,7 +71,6 @@ export function FamilyScreen({
     } catch {
       // Ignore storage error
     }
-    setAlertSource('fallback');
     setRefreshing(false);
   }, []);
 
@@ -76,17 +82,25 @@ export function FamilyScreen({
       if (currentUser) {
         setContactName(currentUser.trustedName);
         setContactPhone(currentUser.trustedPhone);
+        setDraftName(currentUser.trustedName);
+        setDraftPhone(currentUser.trustedPhone);
       } else {
         try {
           const raw = window.localStorage.getItem(CONTACT_STORAGE_KEY);
           if (raw) {
             const parsed = JSON.parse(raw) as { name?: string; phone?: string };
-            if (parsed.name) setContactName(parsed.name);
+            if (parsed.name) {
+              setContactName(parsed.name);
+              setDraftName(parsed.name);
+            }
             if (parsed.phone) {
               setContactPhone(parsed.phone);
+              setDraftPhone(parsed.phone);
               phoneToLoad = parsed.phone;
             }
           }
+          const savedSender = window.localStorage.getItem(SENDER_PHONE_KEY);
+          if (savedSender) setSenderPhone(savedSender);
         } catch {
           // Keep default
         }
@@ -99,8 +113,22 @@ export function FamilyScreen({
   }, [currentUser, loadAlerts]);
 
   async function handleSaveContact() {
-    const cleanName = contactName.trim() || 'Người thân';
-    const cleanPhone = contactPhone.trim() || '0912345678';
+    const cleanName = draftName.trim();
+    const cleanPhone = normalizePhoneDigits(draftPhone);
+    if (cleanName.length < 2) {
+      setContactError('Vui lòng nhập tên người thân (tối thiểu 2 ký tự).');
+      return;
+    }
+    if (!isValidVietnamesePhone(draftPhone)) {
+      setContactError('Số điện thoại không hợp lệ (cần 10 số Việt Nam, VD: 0912345678).');
+      return;
+    }
+
+    setContactError('');
+    setContactName(cleanName);
+    setContactPhone(cleanPhone);
+    onContactLocalSaved?.(cleanName, cleanPhone);
+
     try {
       window.localStorage.setItem(CONTACT_STORAGE_KEY, JSON.stringify({ name: cleanName, phone: cleanPhone }));
     } catch {
@@ -118,16 +146,23 @@ export function FamilyScreen({
       }
     }
     setEditing(false);
-    onNotify(currentUser ? 'Đã lưu & đồng bộ lên tài khoản.' : 'Đã lưu danh bạ trên máy.');
+    onNotify(currentUser ? 'Đã lưu & đồng bộ lên tài khoản.' : 'Đã lưu người thân tin cậy.');
     void loadAlerts(cleanPhone);
   }
 
+  const shortContactName = contactName.split('(')[0].trim() || 'Người thân';
   const displayPhone = showPhone ? contactPhone : maskSensitiveTarget(contactPhone);
   const summarySnippet =
     scannedText.trim() || 'Cuộc gọi tự xưng Công an yêu cầu chuyển 50 triệu để xác minh.';
-  const alertMessage = `[KHẨN - LÁ CHẮN SỐ ĐỒNG NAI] Ba vừa gặp nội dung nghi lừa đảo (${
-    scanResult?.badge ?? 'Mức NGUY HIỂM'
-  }): "${summarySnippet.slice(0, 120)}". Xin con gọi lại xác minh ngay!`;
+  const isSafeVerified = scanResult?.level === 'safe';
+
+  const alertMessage = isSafeVerified
+    ? `[XÁC MINH - LÁ CHẮN SỐ ĐỒNG NAI] Ba vừa kiểm tra nguồn chính thống (${
+        scanResult?.badge ?? 'Đã xác thực'
+      }): "${summarySnippet.slice(0, 120)}". Báo con yên tâm nhé!`
+    : `[KHẨN - LÁ CHẮN SỐ ĐỒNG NAI] Ba vừa gặp nội dung cần cảnh giác (${
+        scanResult?.badge ?? 'Mức NGUY HIỂM'
+      }): "${summarySnippet.slice(0, 120)}". Xin con gọi lại xác minh ngay!`;
 
   async function handleConfirmSend() {
     setSending(true);
@@ -143,10 +178,10 @@ export function FamilyScreen({
         }),
       });
       if (res.ok) {
-        const data = (await res.json()) as { alert: FamilyAlertItem; source: 'supabase' | 'fallback' };
+        const data = (await res.json()) as { alert: FamilyAlertItem };
+        setSessionSentId(data.alert.id);
         const nextList = [data.alert, ...alerts];
         setAlerts(nextList);
-        setAlertSource(data.source);
         try {
           window.localStorage.setItem(ALERTS_STORAGE_KEY, JSON.stringify(nextList.slice(0, 10)));
         } catch {
@@ -159,8 +194,8 @@ export function FamilyScreen({
 
     if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       try {
-        await navigator.share({ title: 'Cảnh báo khẩn từ Lá Chắn Số', text: alertMessage });
-        onNotify(`Đã gửi cảnh báo tới ${contactName}.`);
+        await navigator.share({ title: 'Tin nhắn từ Lá Chắn Số', text: alertMessage });
+        onNotify(`Đã gửi tin nhắn tới ${shortContactName}.`);
         return;
       } catch {
         // Fallback to clipboard
@@ -168,21 +203,21 @@ export function FamilyScreen({
     }
     try {
       await navigator.clipboard.writeText(alertMessage);
-      onNotify(`Đã đẩy cảnh báo lên hệ thống & sao chép gửi ${contactName}.`);
+      onNotify(`Đã đẩy tin lên hệ thống & sao chép gửi ${shortContactName}.`);
     } catch {
-      onNotify(`Đã gửi cảnh báo cho ${contactName}.`);
+      onNotify(`Đã gửi tin cho ${shortContactName}.`);
     }
-    void speakAlertVietnamese('Đã gửi thẻ cảnh báo sang điện thoại người thân.', 'family');
+    void speakAlertVietnamese(`Đã gửi thẻ cảnh báo sang điện thoại của ${shortContactName}.`, 'family');
   }
 
   async function handleAcknowledge(id: string) {
     await fetch('/api/family-alerts', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, acknowledgedBy: contactName.split('(')[0].trim() }),
+      body: JSON.stringify({ id, acknowledgedBy: shortContactName }),
     });
     const updated = alerts.map((a) =>
-      a.id === id ? { ...a, status: 'acknowledged' as const, acknowledgedBy: contactName.split('(')[0].trim() } : a
+      a.id === id ? { ...a, status: 'acknowledged' as const, acknowledgedBy: shortContactName } : a
     );
     setAlerts(updated);
     try {
@@ -190,11 +225,12 @@ export function FamilyScreen({
     } catch {
       // Ignore
     }
-    onNotify('Đã xác nhận đã nhận tin — máy Ba sẽ thấy trạng thái này!');
+    onNotify('Đã xác nhận đã nhận tin — máy người gửi sẽ thấy trạng thái này!');
   }
 
-  const latestAlert = alerts[0];
-  const smsHref = `sms:${contactPhone.replace(/\D/g, '')}?body=${encodeURIComponent(alertMessage)}`;
+  const sessionAlert = sessionSentId ? alerts.find((a) => a.id === sessionSentId) : null;
+  const cleanReceiverDigits = normalizePhoneDigits(contactPhone);
+  const smsHref = `sms:${cleanReceiverDigits}?body=${encodeURIComponent(alertMessage)}`;
 
   return (
     <section className="space-y-4" data-screen="M03">
@@ -218,7 +254,7 @@ export function FamilyScreen({
             view === 'sender' ? 'bg-[#0D685E] text-white' : 'text-[#475569]'
           }`}
         >
-          Góc nhìn Bác Tư (Gửi)
+          Góc nhìn người gửi
         </button>
         <button
           type="button"
@@ -251,7 +287,14 @@ export function FamilyScreen({
               </button>
               <button
                 type="button"
-                onClick={() => setEditing((p) => !p)}
+                onClick={() => {
+                  setDraftName(contactName);
+                  setDraftPhone(contactPhone);
+                  setContactError('');
+                  setEditing((p) => !p);
+                }}
+                data-screen="M03"
+                data-ui="btn-edit-family-contact"
                 className="rounded-xl bg-white px-3 py-1.5 text-[11px] font-bold text-[#0D685E] shadow-sm"
               >
                 {editing ? 'Đóng' : 'Đổi số'}
@@ -262,20 +305,33 @@ export function FamilyScreen({
           {editing && (
             <div className="space-y-2 rounded-2xl bg-[#E9FAF5] p-3 text-xs">
               <input
-                value={contactName}
-                onChange={(e) => setContactName(e.target.value)}
+                value={draftName}
+                onChange={(e) => {
+                  setDraftName(e.target.value);
+                  if (contactError) setContactError('');
+                }}
                 placeholder="Tên người thân (VD: Chị Lan)"
                 className="w-full rounded-xl bg-white p-2.5 outline-none"
               />
               <input
-                value={contactPhone}
-                onChange={(e) => setContactPhone(e.target.value)}
-                placeholder="Số điện thoại"
+                value={draftPhone}
+                onChange={(e) => {
+                  setDraftPhone(e.target.value);
+                  if (contactError) setContactError('');
+                }}
+                placeholder="Số điện thoại (VD: 0912345678)"
                 className="w-full rounded-xl bg-white p-2.5 tabular-nums outline-none"
               />
+              {contactError && (
+                <p className="rounded-lg bg-[#FEF2F2] px-2.5 py-1.5 font-bold text-[#B91C1C]">
+                  {contactError}
+                </p>
+              )}
               <button
                 type="button"
                 onClick={() => void handleSaveContact()}
+                data-screen="M03"
+                data-ui="btn-save-family-contact"
                 className="w-full rounded-xl bg-[#0D685E] py-2.5 font-bold text-white"
               >
                 Lưu người thân tin cậy
@@ -283,22 +339,26 @@ export function FamilyScreen({
             </div>
           )}
 
-          <div className="rounded-2xl bg-[#FFFBEB] p-3.5 text-xs leading-relaxed text-[#92400E]">
-            <strong>Thẻ sẽ gửi đi (Human-in-the-Loop):</strong>
-            <p className="mt-1 text-[#0F172A]">{alertMessage}</p>
+          <div
+            className={`rounded-2xl p-3.5 text-xs leading-relaxed ${
+              isSafeVerified ? 'bg-[#ECFDF5] text-[#065F46]' : 'bg-[#FFFBEB] text-[#92400E]'
+            }`}
+          >
+            <strong>{isSafeVerified ? 'Nội dung chia sẻ an toàn:' : 'Thẻ sẽ gửi đi (bạn tự bấm gửi):'}</strong>
+            <p className="mt-1 text-[#0F172A] break-words">{alertMessage}</p>
           </div>
 
-          {latestAlert && (
+          {sessionAlert && (
             <div
               className={`rounded-2xl px-3 py-2 text-xs font-bold ${
-                latestAlert.status === 'acknowledged'
+                sessionAlert.status === 'acknowledged'
                   ? 'bg-[#ECFDF5] text-[#065F46]'
                   : 'bg-[#E9FAF5] text-[#0D685E]'
               }`}
             >
-              {latestAlert.status === 'acknowledged'
-                ? `✓ ${latestAlert.acknowledgedBy || 'Người thân'} đã xác nhận xem cảnh báo!`
-                : `• Đã đẩy cảnh báo lên hệ thống (${alertSource}) — chờ người thân phản hồi`}
+              {sessionAlert.status === 'acknowledged'
+                ? `✓ ${sessionAlert.acknowledgedBy || shortContactName} đã xác nhận xem tin!`
+                : `• Đã gửi tin lên hệ thống — chờ ${shortContactName} phản hồi`}
             </div>
           )}
 
@@ -315,7 +375,7 @@ export function FamilyScreen({
             ) : (
               <Send className="h-4 w-4" aria-hidden="true" />
             )}
-            {sending ? 'Đang gửi cảnh báo...' : 'Xác nhận gửi cho Chị Lan ngay'}
+            {sending ? 'Đang gửi...' : `Xác nhận gửi cho ${shortContactName} ngay`}
           </button>
 
           <div className="grid grid-cols-2 gap-2.5">
@@ -327,13 +387,13 @@ export function FamilyScreen({
               Nhắn SMS thật
             </a>
             <a
-              href={`tel:${contactPhone.replace(/\D/g, '')}`}
+              href={`tel:${cleanReceiverDigits}`}
               data-screen="M03"
               data-ui="btn-call-family"
               className="flex min-h-[46px] items-center justify-center gap-1.5 rounded-2xl bg-[#E9FAF5] text-xs font-extrabold text-[#0D685E]"
             >
               <PhoneCall className="h-4 w-4" aria-hidden="true" />
-              Gọi điện thẳng
+              Gọi {shortContactName}
             </a>
           </div>
         </div>
@@ -341,9 +401,16 @@ export function FamilyScreen({
         <FamilyReceiverPanel
           alerts={alerts}
           fallbackMessage={alertMessage}
-          contactPhone={contactPhone}
-          sourceLabel={alertSource}
+          senderPhone={senderPhone}
           refreshing={refreshing}
+          onChangeSenderPhone={(p) => {
+            setSenderPhone(p);
+            try {
+              window.localStorage.setItem(SENDER_PHONE_KEY, p);
+            } catch {
+              // Ignore
+            }
+          }}
           onRefresh={() => void loadAlerts(contactPhone)}
           onAcknowledge={(id) => void handleAcknowledge(id)}
           onNavigate={onNavigate}

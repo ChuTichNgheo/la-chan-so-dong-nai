@@ -10,6 +10,34 @@ interface CunChatResponse {
   scanText?: string;
 }
 
+function buildSmartFallback(message: string, speech: string, hasRisk: boolean): CunChatResponse {
+  const lower = message.toLowerCase();
+  if (lower.includes('sim') || lower.includes('khóa số') || lower.includes('điện lực')) {
+    return {
+      reply:
+        'Nhà mạng hay Điện lực không gọi điện hù khóa SIM/cắt điện sau 2 giờ hay bắt bấm link lạ đâu ạ. Bạn hãy kiểm tra trực tiếp trên ứng dụng chính chủ hoặc hỏi người thân nhé!',
+      suggestedScreen: 'M03',
+      suggestedActionLabel: 'Hỏi người thân xác minh',
+      scanText: message,
+    };
+  }
+  if (hasRisk) {
+    return {
+      reply: `${speech} Cún khuyên bạn KHÔNG chuyển tiền hay bấm link, hãy hỏi người thân kiểm tra cùng ngay!`,
+      suggestedScreen: 'M03',
+      suggestedActionLabel: 'Hỏi người thân ngay',
+      scanText: message,
+    };
+  }
+  return {
+    reply:
+      'Cún đã nghe rõ! Với mọi cuộc gọi giục chuyển tiền, đọc OTP hoặc gửi link lạ, nguyên tắc vàng là TẠM DỪNG và kiểm tra kỹ hoặc hỏi người thân trước nhé.',
+    suggestedScreen: 'M02',
+    suggestedActionLabel: 'Kiểm tra kỹ hơn ngay',
+    scanText: message,
+  };
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as { message?: string; offline?: boolean };
@@ -20,22 +48,12 @@ export async function POST(request: Request) {
 
     const layerOne = runLayerOneRules(message);
     const urls = await inspectAllUrlsInText(message, { expandShortlink: !body.offline });
-    const hasRisk = layerOne.level === 'danger' || layerOne.level === 'warn' || urls.some((u) => u.risk === 'danger');
+    const hasRisk =
+      layerOne.level === 'danger' ||
+      layerOne.level === 'warn' ||
+      urls.some((u) => u.risk === 'danger');
 
-    const fallbackReply: CunChatResponse = hasRisk
-      ? {
-          reply: `${layerOne.speech} Cún khuyên bác KHÔNG chuyển tiền hay bấm link, hãy hỏi người thân kiểm tra cùng ngay!`,
-          suggestedScreen: 'M03',
-          suggestedActionLabel: 'Gửi hỏi Chị Lan ngay',
-          scanText: message,
-        }
-      : {
-          reply:
-            'Cún đã nghe rõ! Với mọi cuộc gọi giục chuyển tiền, đọc OTP hoặc gửi link lạ, nguyên tắc vàng là TẠM DỪNG và kiểm tra kỹ hoặc hỏi người thân trước nhé.',
-          suggestedScreen: 'M02',
-          suggestedActionLabel: 'Quét kỹ nội dung ở M02',
-          scanText: message,
-        };
+    const fallbackReply = buildSmartFallback(message, layerOne.speech, hasRisk);
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || body.offline) {
@@ -43,17 +61,15 @@ export async function POST(request: Request) {
     }
 
     const prompt = `Bạn là Cún INFINITY — trợ lý AI thân thiện bảo vệ người dân Đồng Nai (đặc biệt là người cao tuổi và học sinh) khỏi lừa đảo mạng.
-Trả lời câu hỏi dưới đây bằng tiếng Việt ấm áp, rõ ràng, tối đa 3 câu ngắn, thực tế, không dùng thuật ngữ khó. Tuyệt đối KHÔNG khẳng định số lạ là "100% an toàn".
-Trả về JSON: {"reply":"câu trả lời ngắn","suggestedScreen":"M02|M03|M04|M07","suggestedActionLabel":"nhãn nút 3-6 từ"}
-- M02: Quét kiểm tra tin nhắn/link/SĐT
-- M03: Hỏi người thân ngay
-- M04: Lập báo cáo Công an / NCSC / 111
-- M07: Tra cứu Radar cộng đồng Đồng Nai
+Trả lời câu hỏi dưới đây bằng tiếng Việt ấm áp, rõ ràng, sát nội dung người hỏi, tối đa 3 câu ngắn.
+QUAN TRỌNG: Tuyệt đối KHÔNG nhắc các mã kỹ thuật như "M01", "M02", "M03", "M04", "M07". Tuyệt đối KHÔNG khẳng định số lạ là "100% an toàn".
+Trả về JSON: {"reply":"câu trả lời ngắn","suggestedScreen":"M02|M03|M04|M07","suggestedActionLabel":"nhãn nút 3-6 từ không chứa mã M0x"}
 
 Câu hỏi của người dân: "${message}"`;
 
+    const model = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -1,6 +1,7 @@
+import { extractUrlsFromText } from '@/lib/url-inspector';
 import type { AnalyzeResult } from '@/types';
 
-const DANGER_KEYWORDS = [
+const POLICE_SCAM_KEYWORDS = [
   'công an',
   'viện kiểm sát',
   'khởi tố',
@@ -13,29 +14,67 @@ const DANGER_KEYWORDS = [
   '50 triệu',
 ];
 
-const WARN_KEYWORDS = [
-  '.xyz',
-  '.top',
-  '.apk',
+const JOB_SCAM_KEYWORDS = [
   'việc nhẹ',
   'lương cao',
-  'quà tri ân',
   'ctv',
+  'cộng tác viên',
   'nạp trước',
-  'sinh trắc học',
+  'mở nhiệm vụ',
+  'quà tri ân',
 ];
 
-const SAFE_WHITELIST = ['.gov.vn', 'ncsc.gov.vn', 'canhbao.ncsc.gov.vn', 'bocongan.gov.vn'];
+const LINK_SCAM_KEYWORDS = ['.xyz', '.top', '.apk', '.click', '.icu', 'sinh trắc học'];
+
+const OFFICIAL_SAFE_HOSTS = [
+  'gov.vn',
+  'ncsc.gov.vn',
+  'canhbao.ncsc.gov.vn',
+  'bocongan.gov.vn',
+  'dichvucong.gov.vn',
+  'vneid.gov.vn',
+  'dongnai.gov.vn',
+  'chinhphu.vn',
+];
+
+function getVerifiedOfficialUrls(rawText: string): { matchedHosts: string[]; hasNonOfficialUrl: boolean } {
+  const urls = extractUrlsFromText(rawText);
+  if (urls.length === 0) {
+    return { matchedHosts: [], hasNonOfficialUrl: false };
+  }
+
+  const matchedHosts: string[] = [];
+  let hasNonOfficialUrl = false;
+
+  for (const url of urls) {
+    try {
+      const host = new URL(url).hostname.toLowerCase();
+      const isOfficial = OFFICIAL_SAFE_HOSTS.some(
+        (safe) => host === safe || host.endsWith(`.${safe}`)
+      );
+      if (isOfficial) {
+        matchedHosts.push(host);
+      } else {
+        hasNonOfficialUrl = true;
+      }
+    } catch {
+      hasNonOfficialUrl = true;
+    }
+  }
+
+  return { matchedHosts, hasNonOfficialUrl };
+}
 
 /**
  * Deterministic Layer-1 rule engine (< 50ms, works 100% offline).
+ * Security: NEVER check `.gov.vn` as a raw substring across paths/queries.
  */
 export function runLayerOneRules(rawText: string): AnalyzeResult {
   const text = rawText.trim();
   const lower = text.toLowerCase();
 
-  const dangerHits = DANGER_KEYWORDS.filter((kw) => lower.includes(kw));
-  if (dangerHits.length > 0) {
+  const policeHits = POLICE_SCAM_KEYWORDS.filter((kw) => lower.includes(kw));
+  if (policeHits.length > 0) {
     return {
       level: 'danger',
       badge: 'NGUY HIỂM — DẤU HIỆU LỪA ĐẢO CAO',
@@ -43,45 +82,63 @@ export function runLayerOneRules(rawText: string): AnalyzeResult {
       reasons: [
         'Cơ quan Công an, Viện kiểm sát KHÔNG BAO GIỜ yêu cầu chuyển tiền xác minh qua điện thoại.',
         'Đối tượng tạo áp lực thời gian hoặc dọa khởi tố để khiến nạn nhân hoảng loạn.',
-        'Khớp từ khóa kịch bản lừa đảo phổ biến đã ghi nhận tại Đồng Nai.',
+        'Khớp từ khóa kịch bản giả danh cơ quan chức năng đã ghi nhận tại Đồng Nai.',
       ],
-      highlights: dangerHits,
+      highlights: policeHits,
       speech:
         'Cảnh báo nguy hiểm! Công an không bao giờ yêu cầu chuyển tiền qua điện thoại. Bác hãy tắt máy ngay và hỏi người thân nhé!',
       source: 'offline',
     };
   }
 
-  const warnHits = WARN_KEYWORDS.filter((kw) => lower.includes(kw));
-  if (warnHits.length > 0) {
+  const jobHits = JOB_SCAM_KEYWORDS.filter((kw) => lower.includes(kw));
+  const linkHits = LINK_SCAM_KEYWORDS.filter((kw) => lower.includes(kw));
+  if (jobHits.length > 0) {
     return {
       level: 'warn',
-      badge: 'NGHI NGỜ — CẦN KIỂM CHỨNG THÊM',
-      title: 'Có dấu hiệu bất thường trong nội dung hoặc đường dẫn',
+      badge: 'NGHI NGỜ — BẪY VIỆC NHẸ LƯƠNG CAO',
+      title: 'Cẩn thận bẫy tuyển CTV đòi nạp tiền làm nhiệm vụ',
       reasons: [
-        'Tên miền đuôi lạ (.xyz, .top) hoặc yêu cầu cài tệp .apk ngoài kho ứng dụng chính thức.',
-        'Hứa hẹn việc nhẹ lương cao nhưng đòi nạp tiền mở nhiệm vụ trước.',
-        '35% báo cáo lừa đảo tại Đồng Nai xuất phát từ đường dẫn giả mạo tương tự.',
+        'Kẻ gian thường trả thưởng nhỏ ở nhiệm vụ đầu, sau đó yêu cầu nạp tiền triệu mới cho rút.',
+        'Tuyệt đối không nạp tiền trước, không bấm link đuôi lạ (.xyz, .top) đi kèm.',
+        'Nên thoát nhóm ngay và báo cho người thân hoặc thầy cô kiểm tra.',
       ],
-      highlights: warnHits,
+      highlights: [...jobHits, ...linkHits],
       speech:
-        'Cảnh báo nghi ngờ! Đường dẫn hoặc lời mời này có dấu hiệu bất thường. Tuyệt đối không bấm link và không nạp tiền trước.',
+        'Cảnh báo nghi ngờ! Đây là dấu hiệu bẫy việc nhẹ lương cao. Tuyệt đối không nạp tiền mở nhiệm vụ hay bấm link lạ.',
       source: 'offline',
     };
   }
 
-  const safeHits = SAFE_WHITELIST.filter((kw) => lower.includes(kw));
-  if (safeHits.length > 0) {
+  if (linkHits.length > 0) {
+    return {
+      level: 'warn',
+      badge: 'NGHI NGỜ — ĐƯỜNG DẪN / TỆP LẠ',
+      title: 'Có dấu hiệu bất thường trong đường dẫn hoặc tệp cài đặt',
+      reasons: [
+        'Tên miền đuôi lạ (.xyz, .top) hoặc yêu cầu cài tệp .apk ngoài kho ứng dụng chính thức.',
+        '35% báo cáo lừa đảo tại Đồng Nai xuất phát từ đường dẫn giả mạo tương tự.',
+        'Không đăng nhập ngân hàng, không nhập mã OTP qua đường link được gửi tới.',
+      ],
+      highlights: linkHits,
+      speech:
+        'Cảnh báo nghi ngờ! Đường dẫn này có dấu hiệu bất thường. Tuyệt đối không bấm vào hay cài tệp lạ.',
+      source: 'offline',
+    };
+  }
+
+  const { matchedHosts, hasNonOfficialUrl } = getVerifiedOfficialUrls(text);
+  if (matchedHosts.length > 0 && !hasNonOfficialUrl) {
     return {
       level: 'safe',
       badge: 'ĐÃ XÁC THỰC CHÍNH CHỦ',
       title: 'Nguồn thuộc danh sách chính thống đã xác minh',
       reasons: [
-        'Tên miền thuộc hệ thống cơ quan nhà nước (.gov.vn) trong danh sách an toàn.',
-        'Không phát hiện dấu hiệu giả mạo tên miền thường gặp.',
+        `Tên miền chính thức (${matchedHosts[0]}) thuộc hệ thống cơ quan nhà nước (.gov.vn).`,
+        'Đã đối chiếu đúng tên miền gốc (không phải đường dẫn giả nhét .gov.vn ở phần sau).',
         'Bạn vẫn nên kiểm tra đúng chính tả thanh địa chỉ trước khi nhập thông tin.',
       ],
-      highlights: safeHits,
+      highlights: matchedHosts,
       speech: 'Địa chỉ này thuộc danh sách chính thống đã được xác thực.',
       source: 'offline',
     };
@@ -99,7 +156,7 @@ export function runLayerOneRules(rawText: string): AnalyzeResult {
     ],
     highlights: [],
     speech:
-      'Nội dung này chưa có trong danh sách cảnh báo, nhưng bạn vẫn cần cảnh giác cao và không cung cấp mã OTP.',
+      'Chưa ghi nhận cảnh báo với nội dung này, nhưng không đồng nghĩa an toàn một trăm phần trăm. Bạn nhớ giữ cảnh giác nhé!',
     source: 'offline',
   };
 }

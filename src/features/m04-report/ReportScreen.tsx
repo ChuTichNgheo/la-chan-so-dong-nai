@@ -5,20 +5,22 @@ import { Camera, CheckCircle2, Copy, ExternalLink, Lock, Phone } from 'lucide-re
 import { OFFICIAL_HOTLINES } from '@/config/hotlines';
 import { compressImageToBase64 } from '@/lib/image-compress';
 import { maskSensitiveTarget } from '@/lib/privacy';
+import { extractReportPrefill } from '@/lib/report-prefill';
 import { submitNewReport } from '@/lib/report-store';
 
 interface ReportScreenProps {
   scannedText: string;
   onNotify: (msg: string) => void;
+  onReportSubmitted?: () => void;
 }
 
-export function ReportScreen({ scannedText, onNotify }: ReportScreenProps) {
-  const [type, setType] = useState('Đường dẫn giả mạo');
-  const [target, setTarget] = useState('0909888123');
+export function ReportScreen({ scannedText, onNotify, onReportSubmitted }: ReportScreenProps) {
+  const initialPrefill = scannedText ? extractReportPrefill(scannedText) : null;
+
+  const [type, setType] = useState(initialPrefill?.type ?? 'Đường dẫn giả mạo');
+  const [target, setTarget] = useState(initialPrefill?.target ?? '');
   const [area, setArea] = useState('P. Trấn Biên');
-  const [description, setDescription] = useState(
-    'Đối tượng tự xưng cán bộ công an yêu cầu chuyển 50 triệu xác minh tài khoản.'
-  );
+  const [description, setDescription] = useState(initialPrefill?.description ?? '');
   const [submittedInfo, setSubmittedInfo] = useState<{ id: string; source: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [autofilling, setAutofilling] = useState(false);
@@ -59,25 +61,33 @@ export function ReportScreen({ scannedText, onNotify }: ReportScreenProps) {
     }
   }
 
+  const cleanTarget = target.trim();
+  const cleanDescription = description.trim();
+  const hasContent = Boolean(cleanTarget && cleanDescription);
+
   const packetText = `[TIN BÁO LỪA ĐẢO - ĐỒNG NAI] Thủ đoạn: ${type} • Đối tượng: ${
-    maskSensitiveTarget(target) || '(chưa nhập)'
-  } • Khu vực: ${area} • Mô tả: ${description} • Trạng thái: ${
-    submittedInfo ? `Đã ghi nhận (${submittedInfo.id})` : 'Sẵn sàng gửi Đội TN xác minh'
-  }.`;
+    maskSensitiveTarget(cleanTarget) || '(chưa nhập)'
+  } • Khu vực: ${area.trim() || 'Đồng Nai'} • Mô tả: ${
+    cleanDescription || '(chưa nhập)'
+  } • Trạng thái: ${submittedInfo ? `Đã ghi nhận (${submittedInfo.id})` : 'Sẵn sàng gửi xác minh'}.`;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!target.trim() || !description.trim()) {
-      onNotify('Vui lòng điền SĐT/Link nghi vấn và mô tả ngắn.');
+    if (!cleanTarget || !cleanDescription) {
+      onNotify('Vui lòng điền SĐT/Link/STK nghi vấn và mô tả ngắn.');
       return;
     }
     setSubmitting(true);
     try {
-      const res = await submitNewReport({ type, target, area, description });
+      const res = await submitNewReport({
+        type,
+        target: cleanTarget,
+        area: area.trim() || 'Đồng Nai',
+        description: cleanDescription,
+      });
       setSubmittedInfo({ id: res.report.id, source: res.source });
-      onNotify(
-        `Đã gửi báo cáo ${res.report.id} (${res.source === 'supabase' ? 'Supabase' : 'Lưu tạm'}) chờ Đội TN duyệt.`
-      );
+      onReportSubmitted?.();
+      onNotify(`Đã gửi báo cáo ${res.report.id} chờ Đội Thanh niên tình nguyện xác minh.`);
     } catch (err) {
       onNotify(err instanceof Error ? err.message : 'Không thể gửi báo cáo.');
     } finally {
@@ -86,6 +96,10 @@ export function ReportScreen({ scannedText, onNotify }: ReportScreenProps) {
   }
 
   async function handleCopyPacket() {
+    if (!hasContent) {
+      onNotify('Vui lòng nhập đối tượng nghi vấn và mô tả trước khi sao chép hồ sơ.');
+      return;
+    }
     try {
       await navigator.clipboard.writeText(packetText);
       onNotify('Đã sao chép Phiếu tin báo chuẩn hóa để dán vào VNeID / Cổng NCSC!');
@@ -96,7 +110,7 @@ export function ReportScreen({ scannedText, onNotify }: ReportScreenProps) {
 
   return (
     <section className="space-y-4" data-screen="M04">
-      <div className="flex items-start justify-between gap-2 px-1">
+      <div className="flex flex-wrap items-start justify-between gap-2 px-1">
         <div>
           <h1 className="font-[family-name:var(--font-lexend)] text-xl font-extrabold text-[#0F172A]">
             Báo cáo &amp; Hồ sơ Công an
@@ -128,9 +142,11 @@ export function ReportScreen({ scannedText, onNotify }: ReportScreenProps) {
             <button
               type="button"
               onClick={() => {
-                setTarget(scannedText.slice(0, 60));
-                setDescription(scannedText);
-                onNotify('Đã chép nội dung vừa quét từ M02 vào phiếu.');
+                const parsed = extractReportPrefill(scannedText);
+                setType(parsed.type);
+                setTarget(parsed.target);
+                setDescription(parsed.description);
+                onNotify('Đã bóc SĐT/Link & mô tả vừa quét vào phiếu.');
               }}
               className="shrink-0 rounded-full bg-[#E9FAF5] px-3 py-1.5 text-[11px] font-bold text-[#0D685E]"
             >
@@ -175,21 +191,21 @@ export function ReportScreen({ scannedText, onNotify }: ReportScreenProps) {
           <input
             value={area}
             onChange={(e) => setArea(e.target.value)}
-            placeholder="VD: P. Trấn Biên"
+            placeholder="VD: P. Trấn Biên, TP. Long Khánh"
             className="mt-1.5 w-full rounded-2xl bg-[#F4FBF8] p-3 text-sm font-medium text-[#0F172A] outline-none"
           />
         </label>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          rows={2}
-          placeholder="Mô tả ngắn nội dung lừa đảo..."
+          rows={3}
+          placeholder="Mô tả ngắn nội dung hoặc thủ đoạn lừa đảo..."
           className="w-full rounded-2xl bg-[#F4FBF8] p-3 text-sm text-[#0F172A] outline-none"
         />
 
         <div className="flex items-center gap-2 rounded-2xl bg-[#E9FAF5] p-3 text-[11px] font-medium text-[#0D685E]">
           <Lock className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>Tự động che SĐT mặc định &amp; tách bước duyệt tại Radar M07.</span>
+          <span>Tự động che SĐT mặc định &amp; chỉ công khai trên Radar sau khi xác minh.</span>
         </div>
 
         <button
@@ -200,12 +216,12 @@ export function ReportScreen({ scannedText, onNotify }: ReportScreenProps) {
           className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-[#0D685E] font-bold text-white shadow-[0_6px_16px_rgba(13,104,94,0.2)]"
         >
           <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-          {submitting ? 'Đang gửi vào Supabase...' : 'Gửi báo cáo & Tạo phiếu Công an'}
+          {submitting ? 'Đang gửi báo cáo...' : 'Gửi báo cáo & Tạo phiếu Công an'}
         </button>
 
         {submittedInfo && (
           <p className="rounded-2xl bg-[#ECFDF5] p-3 text-xs font-bold text-[#065F46]">
-            Đã lưu {submittedInfo.id} ({submittedInfo.source}) — chờ Quản trị duyệt tại M07!
+            Đã ghi nhận {submittedInfo.id} — đang chờ Đội Thanh niên tình nguyện xác minh tại Radar!
           </p>
         )}
       </form>
@@ -216,11 +232,11 @@ export function ReportScreen({ scannedText, onNotify }: ReportScreenProps) {
             HỒ SƠ TIN BÁO CHUẨN HÓA
           </span>
           <span className="text-[11px] font-semibold text-[#475569]">
-            {submittedInfo ? 'Đã nộp chờ duyệt' : 'Sẵn sàng xuất'}
+            {submittedInfo ? 'Đã nộp chờ duyệt' : hasContent ? 'Sẵn sàng xuất' : 'Chưa đủ thông tin'}
           </span>
         </div>
 
-        <div className="rounded-2xl bg-[#F1F5F9] p-3 text-xs leading-relaxed text-[#0F172A]">
+        <div className="rounded-2xl bg-[#F1F5F9] p-3 text-xs leading-relaxed text-[#0F172A] break-words">
           {packetText}
         </div>
 

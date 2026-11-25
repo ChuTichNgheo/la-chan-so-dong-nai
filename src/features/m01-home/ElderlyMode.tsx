@@ -2,21 +2,28 @@
 
 import { useState } from 'react';
 import { ClipboardPaste, Mic, PhoneCall, Search, Video } from 'lucide-react';
+import { maskSensitiveTarget } from '@/lib/privacy';
 import type { ScreenId } from '@/types';
 
 interface ElderlyModeProps {
+  trustedName: string;
+  trustedPhone: string;
   onNavigate: (screen: ScreenId) => void;
   onSpeakWithCun: () => void;
   onAnalyzeText: (text: string) => void;
 }
 
 export function ElderlyMode({
+  trustedName,
+  trustedPhone,
   onNavigate,
   onSpeakWithCun,
   onAnalyzeText,
 }: ElderlyModeProps) {
   const [showPaste, setShowPaste] = useState(false);
   const [pasteText, setPasteText] = useState('');
+
+  const shortName = trustedName.split('(')[0].trim() || 'Người thân';
 
   return (
     <div className="space-y-3" data-screen="M01b">
@@ -56,9 +63,11 @@ export function ElderlyMode({
         </span>
         <div>
           <div className="font-[family-name:var(--font-lexend)] text-xl font-extrabold leading-tight">
-            HỎI CON GÁI NGAY
+            HỎI {shortName.toUpperCase()} NGAY
           </div>
-          <div className="tabular-nums mt-0.5 text-base font-bold">Chị Lan • 0912 *** 678</div>
+          <div className="tabular-nums mt-0.5 text-base font-bold">
+            {shortName} • {maskSensitiveTarget(trustedPhone)}
+          </div>
         </div>
       </button>
 

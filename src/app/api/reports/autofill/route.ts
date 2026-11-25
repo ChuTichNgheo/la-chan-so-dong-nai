@@ -29,8 +29,9 @@ export async function POST(request: Request) {
 Trả về JSON hợp lệ theo schema:
 {"type":"một trong 4 giá trị: Đường dẫn giả mạo | Giả danh công an / cơ quan | Tuyển CTV việc nhẹ lương cao | Người thân gặp tai nạn","target":"SĐT, đường link, hoặc STK xuất hiện trong ảnh","area":"địa bàn Đồng Nai nếu thấy hoặc P. Trấn Biên","description":"tóm tắt 1-2 câu hành vi lừa đảo trong ảnh"}`;
 
+    const model = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

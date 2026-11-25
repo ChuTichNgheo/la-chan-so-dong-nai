@@ -12,7 +12,7 @@ export interface VideoScenario {
   audioKey: 'danger' | 'warn' | 'intro';
 }
 
-export const VIDEOS_DATA: VideoScenario[] = [
+export const LESSONS_DATA: VideoScenario[] = [
   {
     id: 1,
     group: 'student',
@@ -147,3 +147,5 @@ export const VIDEOS_DATA: VideoScenario[] = [
     audioKey: 'warn',
   },
 ];
+
+export const VIDEOS_DATA: VideoScenario[] = LESSONS_DATA.filter((item) => Boolean(item.src));
