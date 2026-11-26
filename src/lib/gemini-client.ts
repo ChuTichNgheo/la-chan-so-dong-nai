@@ -60,9 +60,11 @@ function getConfiguredApiKeys(): string[] {
 function getModelFallbackChain(): string[] {
   const preferred = process.env.GEMINI_MODEL?.trim();
   const chain = [
-    preferred || 'gemini-2.5-flash',
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
+    preferred || 'gemini-3.5-flash-lite',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
+    'gemini-flash-lite-latest',
+    'gemini-3.5-flash',
     'gemini-3-flash-preview',
   ];
   return Array.from(new Set(chain.filter(Boolean)));
