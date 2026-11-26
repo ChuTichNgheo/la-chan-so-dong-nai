@@ -88,15 +88,19 @@ function detectTriggers(text: string): string[] {
   return LIVE_DANGER_TRIGGERS.filter((kw) => lower.includes(kw));
 }
 
-function isMobileOrWebView(): boolean {
+function isMobileDevice(): boolean {
   if (typeof navigator === 'undefined') return false;
-  const ua = navigator.userAgent || '';
-  return /Android|iPhone|iPad|iPod|Zalo|FBAN|FBAV|Line|MicroMessenger/i.test(ua);
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+}
+
+function isIOSOrInAppWebView(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iPhone|iPad|iPod|Zalo|FBAN|FBAV|Line|MicroMessenger/i.test(navigator.userAgent || '');
 }
 
 function pickSupportedAudioMime(): string {
   if (typeof MediaRecorder === 'undefined') return 'audio/webm';
-  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+  const candidates = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'];
   for (const mime of candidates) {
     if (MediaRecorder.isTypeSupported(mime)) return mime;
   }
@@ -134,6 +138,8 @@ export function LiveVoiceGuardModal({
   );
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const keepSpeechAliveRef = useRef(false);
+  const committedSpeechRef = useRef('');
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -148,6 +154,7 @@ export function LiveVoiceGuardModal({
   }, []);
 
   const stopAll = useCallback(() => {
+    keepSpeechAliveRef.current = false;
     if (simTimerRef.current) {
       clearInterval(simTimerRef.current);
       simTimerRef.current = null;
@@ -236,7 +243,7 @@ export function LiveVoiceGuardModal({
         if (chunks.length === 0) return;
         const actualMime = recorder.mimeType || mimeType || 'audio/webm';
         const blob = new Blob(chunks, { type: actualMime });
-        if (blob.size < 800) {
+        if (blob.size < 400) {
           setStatusNote('Đoạn ghi âm quá ngắn — hãy bấm Micro, nói rõ trong 2–5 giây rồi bấm Dừng nhé.');
           return;
         }
@@ -267,19 +274,88 @@ export function LiveVoiceGuardModal({
         }
       };
 
-      recorder.start();
+      // Pass 250ms timeslice so mobile browsers reliably flush audio chunks on stop
+      recorder.start(250);
       setListening(true);
       setRecordingMode('recorder');
-      setStatusNote('Đang ghi âm trên điện thoại... Nói xong hãy bấm lại nút ĐỎ để Cún phân tích ngay!');
+      setStatusNote('Đang ghi âm... Nói xong hãy bấm lại nút ĐỎ để Cún chép lời & phân tích ngay!');
     } catch {
       stopMediaStream();
       setListening(false);
       setRecordingMode(null);
       setStatusNote(
-        'Điện thoại chưa cấp quyền Micro (hoặc bạn đang mở trong Zalo). Hãy cấp quyền Micro trong Safari/Chrome hoặc bấm 2 nút Thử mẫu!'
+        'Điện thoại chưa cấp quyền Micro (hoặc bạn đang mở trong Zalo). Hãy cấp quyền Micro trong Chrome/Safari hoặc bấm 2 nút Thử mẫu!'
       );
     }
   }, [evaluateText, stopMediaStream]);
+
+  const startNativeSpeechSession = useCallback(
+    (Recognition: SpeechRecognitionCtor) => {
+      const mobile = isMobileDevice();
+      const launch = () => {
+        const recognition = new Recognition();
+        recognition.lang = 'vi-VN';
+        // On Android Chrome, continuous=false + clean restart loop is far more reliable than continuous=true
+        recognition.continuous = !mobile;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+        recognitionRef.current = recognition;
+
+        let sessionFinal = '';
+        recognition.onresult = (event) => {
+          let interim = '';
+          for (let i = event.resultIndex; i < event.results.length; i += 1) {
+            const piece = event.results[i]?.[0]?.transcript ?? '';
+            if (event.results[i]?.isFinal) {
+              sessionFinal = `${sessionFinal} ${piece}`.trim();
+            } else {
+              interim = `${interim} ${piece}`.trim();
+            }
+          }
+          const combined = `${committedSpeechRef.current} ${sessionFinal} ${interim}`.trim();
+          if (combined) evaluateText(combined);
+        };
+
+        recognition.onerror = (evt) => {
+          recognitionRef.current = null;
+          if (evt.error === 'no-speech' && keepSpeechAliveRef.current) {
+            return;
+          }
+          keepSpeechAliveRef.current = false;
+          setListening(false);
+          setRecordingMode(null);
+          if (evt.error === 'not-allowed') {
+            setStatusNote('Bạn chưa cấp quyền Micro cho trình duyệt. Hãy bấm Cho phép Micro rồi thử lại nhé.');
+            return;
+          }
+          // Fallback to MediaRecorder + Gemini Audio if browser speech service fails
+          void startUniversalAudioRecorder();
+        };
+
+        recognition.onend = () => {
+          if (sessionFinal) {
+            committedSpeechRef.current = `${committedSpeechRef.current} ${sessionFinal}`.trim();
+          }
+          recognitionRef.current = null;
+          if (keepSpeechAliveRef.current) {
+            try {
+              launch();
+              return;
+            } catch {
+              // Fall through to stop
+            }
+          }
+          setListening(false);
+          setRecordingMode(null);
+        };
+
+        recognition.start();
+      };
+
+      launch();
+    },
+    [evaluateText, startUniversalAudioRecorder]
+  );
 
   const handleToggleMic = useCallback(() => {
     if (listening) {
@@ -296,65 +372,34 @@ export function LiveVoiceGuardModal({
     stopAll();
     stopVietnameseSpeech();
     alertedRef.current = false;
+    committedSpeechRef.current = '';
     setTranscript('');
     setHits([]);
 
-    // On mobile phones (iPhone/Android/Zalo), Universal MediaRecorder + Gemini Audio is 10x more reliable than Web SpeechRecognition
     const win = window as unknown as {
       SpeechRecognition?: SpeechRecognitionCtor;
       webkitSpeechRecognition?: SpeechRecognitionCtor;
     };
     const Recognition = win.SpeechRecognition ?? win.webkitSpeechRecognition;
 
-    if (isMobileOrWebView() || !Recognition) {
+    // Prefer native real-time SpeechRecognition on Desktop & Android Chrome;
+    // use MediaRecorder + Gemini Audio on iPhone Safari / Zalo WebView / unsupported browsers.
+    if (!Recognition || isIOSOrInAppWebView()) {
       void startUniversalAudioRecorder();
       return;
     }
 
     try {
-      const recognition = new Recognition();
-      recognition.lang = 'vi-VN';
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.maxAlternatives = 1;
-      recognitionRef.current = recognition;
-
-      let committedText = '';
-      recognition.onresult = (event) => {
-        let interim = '';
-        for (let i = event.resultIndex; i < event.results.length; i += 1) {
-          const piece = event.results[i]?.[0]?.transcript ?? '';
-          if (event.results[i]?.isFinal) {
-            committedText = `${committedText} ${piece}`.trim();
-          } else {
-            interim = `${interim} ${piece}`.trim();
-          }
-        }
-        evaluateText(`${committedText} ${interim}`.trim());
-      };
-
-      recognition.onerror = () => {
-        recognitionRef.current = null;
-        setListening(false);
-        setRecordingMode(null);
-        // Seamless fallback to universal MediaRecorder
-        void startUniversalAudioRecorder();
-      };
-
-      recognition.onend = () => {
-        setListening(false);
-        setRecordingMode(null);
-        recognitionRef.current = null;
-      };
-
-      recognition.start();
+      keepSpeechAliveRef.current = true;
+      startNativeSpeechSession(Recognition);
       setListening(true);
       setRecordingMode('speech');
       setStatusNote('Đang lắng nghe tiếng Việt trực tiếp... Cún sẽ báo động ngay khi có từ khóa lừa đảo!');
     } catch {
+      keepSpeechAliveRef.current = false;
       void startUniversalAudioRecorder();
     }
-  }, [evaluateText, listening, recordingMode, startUniversalAudioRecorder, stopAll]);
+  }, [listening, recordingMode, startNativeSpeechSession, startUniversalAudioRecorder, stopAll]);
 
   function startDemoStream(scriptText: string) {
     stopAll();
@@ -382,6 +427,7 @@ export function LiveVoiceGuardModal({
 
   useEffect(() => {
     return () => {
+      keepSpeechAliveRef.current = false;
       if (simTimerRef.current) {
         clearInterval(simTimerRef.current);
         simTimerRef.current = null;
@@ -419,7 +465,6 @@ export function LiveVoiceGuardModal({
           isDanger ? 'border-[#DC2626]' : 'border-[#0D685E]'
         }`}
       >
-        {/* Top Banner — fixed shrink-0 on close button so it stays perfectly circular */}
         <div
           className={`flex items-center justify-between gap-2.5 px-4 py-3.5 text-white transition-colors ${
             isDanger
@@ -461,7 +506,6 @@ export function LiveVoiceGuardModal({
         </div>
 
         <div className="space-y-3.5 p-4">
-          {/* Mic Trigger + Live Audio Waves */}
           <div className="flex flex-col items-center gap-2.5 rounded-2xl bg-[#F4FBF8] p-4 text-center">
             <button
               type="button"
@@ -498,7 +542,6 @@ export function LiveVoiceGuardModal({
             <p className="text-xs font-semibold text-[#475569]">{statusNote}</p>
           </div>
 
-          {/* Live Transcript Box */}
           <div
             className={`min-h-[82px] rounded-2xl border p-3 text-xs leading-relaxed ${
               isDanger
@@ -536,7 +579,6 @@ export function LiveVoiceGuardModal({
             )}
           </div>
 
-          {/* Quick Demo Buttons for Stage / Noisy Hall Fallback */}
           <div className="flex flex-wrap gap-1.5">
             {DEMO_CALL_SCRIPTS.map((demo) => (
               <button
@@ -552,7 +594,6 @@ export function LiveVoiceGuardModal({
             ))}
           </div>
 
-          {/* Emergency / Next Actions */}
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
