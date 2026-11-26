@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { useEffect, useRef, useState } from 'react';
 import { CunAiGuideOverlay, type CunGuideStep } from '@/components/CunAiGuideOverlay';
 import { CunAiSheet, type CunFlowId } from '@/components/CunAiSheet';
+import type { CunAgentAction } from '@/app/api/cun-chat/route';
 import { LiveVoiceGuardModal } from '@/components/LiveVoiceGuardModal';
 import { MobileShell } from '@/components/MobileShell';
 import { QrCameraScannerModal } from '@/components/QrCameraScannerModal';
@@ -317,6 +318,78 @@ export default function HomePage() {
     });
   }
 
+  function handleExecuteCunAction(action: CunAgentAction) {
+    stopGuide();
+    setToastMsg(null);
+
+    if (action.type === 'set_ui_mode') {
+      const nextMode: UiMode =
+        action.payload === 'minimal' || action.payload === 'pro' || action.payload === 'standard'
+          ? action.payload
+          : 'minimal';
+      handleChangeUiMode(nextMode);
+      return;
+    }
+
+    setCunOpen(false);
+
+    if (action.type === 'scan_text') {
+      const target = action.payload?.trim() || PRESET_INPUTS.danger;
+      void handleAnalyze(target, true);
+      return;
+    }
+    if (action.type === 'ask_family') {
+      if (action.payload?.trim()) {
+        setScannedText(action.payload.trim());
+        setScanResult(runLayerOneRules(action.payload.trim()));
+      }
+      setActiveScreen('M03');
+      setGuideStep({
+        targetUi: 'btn-confirm-send-family',
+        caption: 'Cún đã chuẩn bị sẵn — Bác tự bấm xác nhận Gửi người thân nhé!',
+        phase: 'stop',
+        mood: 'idle',
+      });
+      return;
+    }
+    if (action.type === 'prefill_report') {
+      if (action.payload?.trim()) {
+        setScannedText(action.payload.trim());
+      }
+      setActiveScreen('M04');
+      setGuideStep({
+        targetUi: 'btn-submit-report',
+        caption: 'Cún đã điền sẵn phiếu báo cáo — Bác kiểm tra rồi tự bấm Gửi nhé!',
+        phase: 'stop',
+      });
+      return;
+    }
+    if (action.type === 'open_live_voice') {
+      setLiveVoiceOpen(true);
+      return;
+    }
+    if (action.type === 'open_qr_scanner') {
+      setQrOpen(true);
+      return;
+    }
+    if (action.type === 'open_videos') {
+      setActiveScreen('M05');
+      return;
+    }
+    if (action.type === 'open_learning') {
+      setActiveScreen('M06');
+      return;
+    }
+    if (action.type === 'open_radar') {
+      setActiveScreen('M07');
+      setGuideStep({
+        targetUi: 'btn-zalo-export',
+        caption: 'Bấm Xuất Zalo để tạo thẻ cảnh báo khu phố!',
+        phase: 'stop',
+      });
+    }
+  }
+
   const trustedName = currentUser?.trustedName ?? localContact.name;
   const trustedPhone = currentUser?.trustedPhone ?? localContact.phone;
 
@@ -466,10 +539,10 @@ export default function HomePage() {
         open={cunOpen}
         offlineMode={offlineMode}
         uiMode={uiMode}
+        activeScreen={activeScreen}
         onClose={() => setCunOpen(false)}
         onRunFlow={(flow) => void handleRunCunFlow(flow)}
-        onNavigate={navigateTo}
-        onAnalyzeText={(t) => void handleAnalyze(t)}
+        onExecuteAction={handleExecuteCunAction}
       />
       {liveVoiceOpen && (
         <LiveVoiceGuardModal
